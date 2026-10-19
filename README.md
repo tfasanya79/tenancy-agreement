@@ -405,7 +405,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     138 tests
+├── tests/                     141 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -422,7 +422,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 138 tests |
+| `pnpm test` | Run the 141 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm sample` | Rebuild `samples/` from the templates |
 | `pnpm rules` | Regenerate `docs/RULES.md` from the rule set |
@@ -514,7 +514,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 138 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 141 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ⚠️ needs your key — the transport, retries and tool-calling loop are covered by tests, but the first real call is yours to make. `pnpm doctor` verifies the key and endpoint |
@@ -536,7 +536,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 138 tests
+pnpm test        # 141 tests
 pnpm typecheck
 ```
 

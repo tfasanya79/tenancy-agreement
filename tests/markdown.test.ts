@@ -24,6 +24,16 @@ describe('inline formatting', () => {
   it('always returns at least one run', () => {
     assert.deepEqual(parseInline(''), [{ text: '' }]);
   });
+
+  it('leaves no stray asterisks when a bold placeholder was empty', () => {
+    // What `**{{missing}}**` expands to.
+    assert.deepEqual(parseInline('Between **** and the tenant'), [{ text: 'Between  and the tenant' }]);
+    assert.deepEqual(parseInline('****'), [{ text: '' }]);
+  });
+
+  it('still renders legitimate emphasis', () => {
+    assert.deepEqual(parseInline('**Deposit**'), [{ text: 'Deposit', bold: true }]);
+  });
 });
 
 describe('block parsing', () => {

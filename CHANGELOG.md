@@ -71,7 +71,7 @@ tenancy documents.
   and a named data volume.
 - `pnpm doctor` health check, `pnpm sample` demo-pack builder, `pnpm rules`
   documentation generator.
-- 138 tests covering the template engine, Markdown parser, compliance maths, field
+- 141 tests covering the template engine, Markdown parser, compliance maths, field
   merging, document generation, storage, the HTTP API and the agent loop.
 
 ### Known limitations

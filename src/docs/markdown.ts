@@ -30,18 +30,22 @@ const RULE = /^(-{3,}|\*{3,}|_{3,})$/;
 
 /** Parse `**bold**` and `*italic*` inside a line of text. */
 export function parseInline(text: string): Inline[] {
+  // `**{{optional}}**` collapses to `****` when the value is empty. Removing a
+  // run of four or more asterisks stops the renderer emitting a stray `<em>*`.
+  const cleaned = text.replace(/\*{4,}/g, '');
+
   const runs: Inline[] = [];
   const pattern = /(\*\*)(.+?)\1|(\*)(.+?)\3/g;
   let last = 0;
-  let match: RegExpExecArray | null = pattern.exec(text);
+  let match: RegExpExecArray | null = pattern.exec(cleaned);
   while (match !== null) {
-    if (match.index > last) runs.push({ text: text.slice(last, match.index) });
+    if (match.index > last) runs.push({ text: cleaned.slice(last, match.index) });
     if (match[2] !== undefined) runs.push({ text: match[2], bold: true });
     else if (match[4] !== undefined) runs.push({ text: match[4], italic: true });
     last = match.index + match[0].length;
-    match = pattern.exec(text);
+    match = pattern.exec(cleaned);
   }
-  if (last < text.length) runs.push({ text: text.slice(last) });
+  if (last < cleaned.length) runs.push({ text: cleaned.slice(last) });
   if (runs.length === 0) runs.push({ text: '' });
   return runs;
 }
