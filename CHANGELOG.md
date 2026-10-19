@@ -6,6 +6,30 @@ All notable changes to this project. The format follows
 
 ---
 
+## [Unreleased]
+
+### Added — document audit (`src/docs/templateAudit.ts`)
+
+Groundwork for letting an agency upload its own agreement. Before such a document
+is automated, it is pattern-checked against the current law — no model involved, so
+the answer is deterministic and every finding quotes the offending text:
+
+- flags an agreement that still describes itself as an **assured shorthold
+  tenancy**, refers to **section 21** or **section 19A**, or creates a **fixed
+  term** — all superseded on 1 May 2026;
+- flags a vague rent review ("a reasonable percentage") that does not describe the
+  section 13 procedure;
+- notes a missing pets provision and a missing 30-day deposit deadline, only for
+  documents that actually read like a tenancy agreement;
+- understands negation, so a correct document that mentions section 21 in order to
+  say it is abolished is not flagged — which matters, because the shipped
+  agreement does exactly that.
+
+14 tests, including one asserting that every shipped template passes the audit that
+will be applied to customer uploads.
+
+---
+
 ## [1.0.0] — 2026-10-19
 
 The first working release. A letting agent can create a tenant pack, fill it from a
