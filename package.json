@@ -14,7 +14,8 @@
     "typecheck": "tsc --noEmit",
     "doctor": "node --env-file-if-exists=.env scripts/doctor.ts",
     "sample": "node --env-file-if-exists=.env scripts/make-sample.ts",
-    "rules": "node scripts/gen-rules.ts"
+    "rules": "node scripts/gen-rules.ts",
+    "demo:fill": "node scripts/demo-fill.ts"
   },
   "keywords": [
     "tenancy",

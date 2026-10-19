@@ -7,6 +7,7 @@ import {
   missingCoreFields,
   normaliseFields,
   hasValue,
+  paymentDateFor,
 } from '../src/docs/fields.ts';
 import { completeFields } from './helpers.ts';
 
@@ -176,6 +177,43 @@ describe('field normalisation', () => {
       tenants: [{ full_name: ' Alex ', email: '' }, {}],
     });
     assert.deepEqual(normalised['tenants'], [{ full_name: 'Alex' }]);
+  });
+});
+
+describe('derived values', () => {
+  it('sets the first payment date to the day before the tenancy starts', () => {
+    const { merged } = mergeFields({}, { 'tenancy.start_date': '2026-11-01' });
+    assert.equal(merged['tenancy.payment_date'], '2026-10-31');
+  });
+
+  it('works across a month boundary and a leap year', () => {
+    assert.equal(paymentDateFor('2026-03-01'), '2026-02-28');
+    assert.equal(paymentDateFor('2028-03-01'), '2028-02-29');
+    assert.equal(paymentDateFor('2027-01-01'), '2026-12-31');
+  });
+
+  it('is calendar-safe across the October clock change', () => {
+    // Adding 24 hours of milliseconds here would land on 24 October again.
+    assert.equal(paymentDateFor('2026-10-26'), '2026-10-25');
+  });
+
+  it('re-derives when the start date changes', () => {
+    const first = mergeFields({}, { 'tenancy.start_date': '2026-11-01' }).merged;
+    const second = mergeFields(first, { 'tenancy.start_date': '2026-12-01' }).merged;
+    assert.equal(second['tenancy.payment_date'], '2026-11-30');
+  });
+
+  it('lets an explicit payment date win', () => {
+    const { merged } = mergeFields(
+      {},
+      { 'tenancy.start_date': '2026-11-01', 'tenancy.payment_date': '2026-11-01' },
+    );
+    assert.equal(merged['tenancy.payment_date'], '2026-11-01');
+  });
+
+  it('does nothing without a start date', () => {
+    const { merged } = mergeFields({}, { 'tenancy.rent_amount': 980 });
+    assert.equal('tenancy.payment_date' in merged, false);
   });
 });
 

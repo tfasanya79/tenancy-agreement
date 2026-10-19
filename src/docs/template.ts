@@ -275,6 +275,11 @@ export function toNumber(value: unknown): number | null {
   return Number.isFinite(numeric) ? numeric : null;
 }
 
+/** Public date formatting, so other modules present dates the same way. */
+export function formatDateStyle(value: unknown, style: 'long' | 'ordinal' | 'short'): string {
+  return formatDate(value, style);
+}
+
 function formatDate(value: unknown, style: 'long' | 'ordinal' | 'short'): string {
   const date = parseDate(value);
   if (date === null) return '';

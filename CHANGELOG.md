@@ -8,6 +8,43 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — filling an agency's own Word document (`src/docs/docxFill.ts`)
+
+The core of "use my document, not yours". A `.docx` is opened (it is a ZIP of
+XML), the values are substituted inside the paragraphs that contain them, and it
+is written back — so letterheads, numbering, fonts, tables and signature blocks
+survive untouched. `readZip()` was added to `src/util/zip.ts` to make that possible
+without a new dependency.
+
+- **Word splits sentences into runs.** `£9` and `80` can be two different `<w:t>`
+  elements with different formatting, so searching for `£980` finds nothing. The
+  engine rebuilds each paragraph's plain text, finds the value in that, and maps
+  the edit back onto the runs.
+- **Formatting is kept.** The first run in a match keeps its properties, so a bold
+  rent figure stays bold; `xml:space="preserve"` is added where a replacement
+  needs spaces.
+- **Values are written the way the document writes them.** `formatLike()` turns
+  `1450` into `£1,450` when the original said `£980`, and `2026-11-01` into
+  `1 November 2026`, `1st November 2026` or `01/11/2026` to match the sample.
+- **Ambiguous values can be targeted.** A start date and an inventory date are
+  often the same day; `near` restricts a link to paragraphs containing identifying
+  words, and targeted links are applied first.
+- **Nothing is silently skipped.** Values that were not found are reported back.
+
+### Added — room-by-room lettings
+
+- `property.room_number`, for agencies letting a house room by room.
+- `inventory.scheduled_date` and a new *Inventory & condition* group.
+- `tenancy.payment_date` is now derived: the day before the start date, then
+  monthly (calendar-safe across clock changes), editable if the agreement says
+  otherwise.
+
+`pnpm demo:fill` builds a Word agreement resembling an agency's own, then fills it
+for a new tenant with the eight values an agent actually changes, writing both
+versions to `.incoming/demo/` for inspection in Word.
+
+184 tests.
+
 ### Added — document audit (`src/docs/templateAudit.ts`)
 
 Groundwork for letting an agency upload its own agreement. Before such a document

@@ -29,6 +29,7 @@ export type GroupId =
   | 'tenants'
   | 'tenancy'
   | 'deposit'
+  | 'inventory'
   | 'utilities'
   | 'safety'
   | 'guarantor'
@@ -38,9 +39,10 @@ export type GroupDef = { id: GroupId; title: string; blurb: string };
 
 export const GROUPS: readonly GroupDef[] = [
   { id: 'tenants', title: 'The tenant(s)', blurb: 'Everyone named on the tenancy, in the order they should appear on the contract.' },
-  { id: 'property', title: 'The property', blurb: 'The address the tenancy relates to.' },
+  { id: 'property', title: 'The property', blurb: 'The address the tenancy relates to, and which room if you let room by room.' },
   { id: 'tenancy', title: 'The tenancy', blurb: 'When it starts, what the rent is and how it is paid.' },
   { id: 'deposit', title: 'Deposit', blurb: 'How much is held, and which scheme protects it.' },
+  { id: 'inventory', title: 'Inventory & condition', blurb: 'The schedule of condition agreed at the start of the tenancy.' },
   { id: 'landlord', title: 'The landlord', blurb: 'The name and address that must appear on the agreement.' },
   { id: 'agency', title: 'Your agency', blurb: 'Your own details, copied onto every pack.' },
   { id: 'safety', title: 'Safety & compliance', blurb: 'Certificates and documents you must have given or checked.' },
@@ -92,8 +94,9 @@ export const FIELDS: readonly FieldDef[] = [
   { key: 'landlord.phone', label: "Landlord's phone", type: 'text', group: 'landlord' },
 
   // Property -------------------------------------------------------------
-  { key: 'property.address_line1', label: 'Address line 1', type: 'text', group: 'property', core: true },
+  { key: 'property.address_line1', label: 'Address line 1', type: 'text', group: 'property', core: true, placeholder: 'e.g. 14 Beech Road' },
   { key: 'property.address_line2', label: 'Address line 2', type: 'text', group: 'property' },
+  { key: 'property.room_number', label: 'Room number', type: 'text', group: 'property', placeholder: 'e.g. Room 2', help: 'Leave blank if you let the whole property rather than a room.' },
   { key: 'property.city', label: 'Town or city', type: 'text', group: 'property' },
   { key: 'property.postcode', label: 'Postcode', type: 'text', group: 'property', core: true },
   { key: 'property.property_type', label: 'Property type', type: 'select', options: PROPERTY_TYPES, group: 'property' },
@@ -119,6 +122,13 @@ export const FIELDS: readonly FieldDef[] = [
 
   // Tenancy --------------------------------------------------------------
   { key: 'tenancy.start_date', label: 'Tenancy start date', type: 'date', group: 'tenancy', core: true },
+  {
+    key: 'tenancy.payment_date',
+    label: 'First payment date',
+    type: 'date',
+    group: 'tenancy',
+    help: 'Filled in for you as the day before the start date, then monthly. Change it if your agreement says otherwise.',
+  },
   { key: 'tenancy.rent_amount', label: 'Rent', type: 'money', group: 'tenancy', core: true },
   { key: 'tenancy.rent_frequency', label: 'Rent period', type: 'select', options: RENT_FREQUENCY, group: 'tenancy' },
   { key: 'tenancy.rent_due_day', label: 'Rent due', type: 'text', group: 'tenancy', placeholder: 'e.g. 1st of each month' },
@@ -139,6 +149,15 @@ export const FIELDS: readonly FieldDef[] = [
   { key: 'tenancy.deposit_scheme', label: 'Deposit scheme', type: 'select', options: DEPOSIT_SCHEMES, group: 'deposit' },
   { key: 'tenancy.deposit_scheme_ref', label: 'Scheme reference', type: 'text', group: 'deposit' },
   { key: 'tenancy.deposit_received_date', label: 'Deposit received on', type: 'date', group: 'deposit', help: 'It must be protected within 30 days of this date.' },
+
+  // Inventory ------------------------------------------------------------
+  {
+    key: 'inventory.scheduled_date',
+    label: 'Schedule of condition & inventory date',
+    type: 'date',
+    group: 'inventory',
+    help: 'The date the inventory and condition report is agreed, usually the day the tenant moves in.',
+  },
 
   // Utilities ------------------------------------------------------------
   { key: 'utilities.gas_supplier', label: 'Gas supplier', type: 'text', group: 'utilities' },
@@ -278,6 +297,32 @@ export function normaliseFields(raw: Record<string, unknown>): Record<string, un
   return out;
 }
 
+/** The ISO date one day before `startIso` — the default first payment date. */
+export function paymentDateFor(startIso: string): string {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(startIso.trim());
+  if (match === null) return '';
+  const [, y, m, d] = match as unknown as [string, string, string, string];
+  const date = new Date(Number(y), Number(m) - 1, Number(d));
+  if (Number.isNaN(date.getTime())) return '';
+  date.setDate(date.getDate() - 1); // calendar-safe across BST/GMT changes
+  return `${date.getFullYear()}-${String(date.getMonth() + 1).padStart(2, '0')}-${String(date.getDate()).padStart(2, '0')}`;
+}
+
+/**
+ * Fill in values that follow from others.
+ *
+ * The first rent payment is the day before the tenancy starts, then monthly. That
+ * is derived rather than asked for, but it stays editable: a caller that supplies
+ * a payment date explicitly always wins.
+ */
+function applyDerived(merged: Record<string, unknown>, supplied: Record<string, unknown>): void {
+  if (hasValue(supplied['tenancy.payment_date'])) return;
+  const start = merged['tenancy.start_date'];
+  if (typeof start !== 'string' || start === '') return;
+  const derived = paymentDateFor(start);
+  if (derived !== '') merged['tenancy.payment_date'] = derived;
+}
+
 export type MergeResult = {
   merged: Record<string, unknown>;
   /** Keys that were actually written this time. */
@@ -302,6 +347,8 @@ export function mergeFields(previous: Record<string, unknown>, incomingRaw: Reco
   }
 
   const known = new Set(FIELDS.map((field) => field.key));
+  applyDerived(merged, normalised);
+
   return {
     merged,
     written: Object.keys(normalised),

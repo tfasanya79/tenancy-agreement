@@ -7,6 +7,7 @@
  */
 
 import { Buffer } from 'node:buffer';
+import { inflateRawSync } from 'node:zlib';
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -99,3 +100,68 @@ export function createZip(entries: ZipEntry[], modified = new Date()): Buffer {
 
   return Buffer.concat([...locals, centralDir, end]);
 }
+
+/* -------------------------------------------------------------------------- */
+/*  Reading                                                                   */
+/* -------------------------------------------------------------------------- */
+
+/**
+ * Read a ZIP archive into a name → bytes map.
+ *
+ * Needed for one job: opening a `.docx` so we can edit its XML and close it
+ * again. Word files are ZIPs, and this keeps the project free of a native
+ * dependency just to read one. Sizes come from the central directory, which is
+ * the only place they are reliable when a stream was written with a data
+ * descriptor.
+ */
+export function readZip(buffer: Buffer): Map<string, Buffer> {
+  const entries = new Map<string, Buffer>();
+
+  // End of central directory: scan back from the end for its signature.
+  let eocd = -1;
+  for (let i = buffer.length - 22; i >= 0 && i > buffer.length - 66_000; i -= 1) {
+    if (buffer.readUInt32LE(i) === 0x06054b50) {
+      eocd = i;
+      break;
+    }
+  }
+  if (eocd === -1) throw new Error('This file is not a valid .docx (no ZIP directory found).');
+
+  const count = buffer.readUInt16LE(eocd + 10);
+  let offset = buffer.readUInt32LE(eocd + 16);
+
+  for (let i = 0; i < count; i += 1) {
+    if (offset + 46 > buffer.length) break;
+    if (buffer.readUInt32LE(offset) !== 0x02014b50) break;
+
+    const method = buffer.readUInt16LE(offset + 10);
+    const compressedSize = buffer.readUInt32LE(offset + 20);
+    const nameLength = buffer.readUInt16LE(offset + 28);
+    const extraLength = buffer.readUInt16LE(offset + 30);
+    const commentLength = buffer.readUInt16LE(offset + 32);
+    const localOffset = buffer.readUInt32LE(offset + 42);
+    const name = buffer.toString('utf8', offset + 46, offset + 46 + nameLength);
+
+    // Local header tells us where the payload actually starts.
+    if (localOffset + 30 <= buffer.length && buffer.readUInt32LE(localOffset) === 0x04034b50) {
+      const localNameLength = buffer.readUInt16LE(localOffset + 26);
+      const localExtraLength = buffer.readUInt16LE(localOffset + 28);
+      const dataStart = localOffset + 30 + localNameLength + localExtraLength;
+      const data = buffer.subarray(dataStart, dataStart + compressedSize);
+
+      if (!name.endsWith('/')) {
+        try {
+          entries.set(name, method === 8 ? inflateRawSync(data) : Buffer.from(data));
+        } catch {
+          // A directory entry, or an entry we cannot read — skip rather than fail.
+        }
+      }
+    }
+
+    offset += 46 + nameLength + extraLength + commentLength;
+  }
+
+  if (entries.size === 0) throw new Error('This .docx appears to be empty or damaged.');
+  return entries;
+}
+
