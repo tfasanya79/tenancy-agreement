@@ -1,0 +1,38 @@
+{
+  "name": "tenancydesk",
+  "version": "1.0.0",
+  "private": true,
+  "description": "TenancyDesk — turn tenancy document templates into a complete, per-tenant document pack with an AI agent. Built for small UK letting agents.",
+  "type": "module",
+  "engines": {
+    "node": ">=24.0.0"
+  },
+  "scripts": {
+    "start": "node --env-file-if-exists=.env src/server.ts",
+    "dev": "node --watch --env-file-if-exists=.env src/server.ts",
+    "test": "node --test --test-isolation=none \"tests/*.test.ts\"",
+    "typecheck": "tsc --noEmit",
+    "doctor": "node --env-file-if-exists=.env scripts/doctor.ts",
+    "sample": "node --env-file-if-exists=.env scripts/make-sample.ts",
+    "rules": "node scripts/gen-rules.ts"
+  },
+  "keywords": [
+    "tenancy",
+    "letting-agent",
+    "property",
+    "documents",
+    "agentic",
+    "deepseek",
+    "uk"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@fastify/static": "^10.1.6",
+    "docx": "^9.12.0",
+    "fastify": "^5.12.7"
+  },
+  "devDependencies": {
+    "@types/node": "^26.6.5",
+    "typescript": "^7.0.2"
+  }
+}

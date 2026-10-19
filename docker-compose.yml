@@ -1,0 +1,50 @@
+# TenancyDesk
+#
+#   cp .env.example .env     # then put your DEEPSEEK_API_KEY in it
+#   docker compose up -d
+#   open http://localhost:3000
+#
+# The database and every generated document live in the `tenancydesk-data`
+# volume. See docs/DEPLOY.md for backups and for exposing this safely.
+
+services:
+  tenancydesk:
+    build: .
+    image: tenancydesk:1.0.0
+    container_name: tenancydesk
+    restart: unless-stopped
+
+    env_file:
+      - .env
+
+    environment:
+      DATA_DIR: /data
+      HOST: 0.0.0.0
+      PORT: "3000"
+      NODE_ENV: production
+
+    ports:
+      # Bound to localhost only. Do NOT change this to 0.0.0.0 on a public
+      # server — the app has no login. Put a VPN or authenticating proxy in
+      # front of it instead (see docs/DEPLOY.md).
+      - "127.0.0.1:3000:3000"
+
+    volumes:
+      # Your tenant data — back this up.
+      - tenancydesk-data:/data
+      # Edit the documents on the host without rebuilding the image.
+      - ./templates:/app/templates:ro
+
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - "fetch('http://127.0.0.1:3000/api/health').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"
+      interval: 30s
+      timeout: 5s
+      retries: 3
+      start_period: 15s
+
+volumes:
+  tenancydesk-data:

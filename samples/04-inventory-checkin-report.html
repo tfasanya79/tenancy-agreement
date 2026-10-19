@@ -1,0 +1,101 @@
+<!doctype html>
+<html lang="en-GB">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Inventory and Check-In Report</title>
+<style>
+  :root { --ink: #1a1a1a; --muted: #5a5a5a; --rule: #d8d3ca; --accent: #7a5c3e; }
+  * { box-sizing: border-box; }
+  body {
+    margin: 0; background: #eceae5; color: var(--ink);
+    font-family: Georgia, 'Times New Roman', serif; font-size: 11pt; line-height: 1.55;
+  }
+  .toolbar {
+    position: sticky; top: 0; z-index: 10; display: flex; gap: .6rem; align-items: center;
+    padding: .6rem 1rem; background: #23201d; color: #f3efe8;
+    font-family: -apple-system, 'Segoe UI', Roboto, sans-serif; font-size: .82rem;
+  }
+  .toolbar strong { font-weight: 600; letter-spacing: .02em; }
+  .toolbar .spacer { flex: 1; }
+  .toolbar button {
+    font: inherit; cursor: pointer; border-radius: 6px; padding: .42rem .8rem;
+    border: 1px solid #4a443d; background: #322d28; color: #f3efe8;
+  }
+  .toolbar button:hover { background: #423b34; }
+  .toolbar .hint { opacity: .68; }
+  .sheet {
+    max-width: 210mm; margin: 1.4rem auto; padding: 22mm 20mm; background: #fff;
+    box-shadow: 0 2px 18px rgba(0,0,0,.12);
+  }
+  h1 { font-size: 20pt; text-align: center; margin: 0 0 .3rem; letter-spacing: .01em; }
+  h1 + p { text-align: center; }
+  h2 { font-size: 12.5pt; margin: 1.6rem 0 .55rem; padding-bottom: .22rem; border-bottom: 1px solid var(--rule); }
+  h3 { font-size: 11pt; margin: 1.2rem 0 .4rem; }
+  p { margin: 0 0 .7rem; text-align: justify; }
+  ul, ol { margin: 0 0 .8rem; padding-left: 1.35rem; }
+  ol.plain { list-style: none; padding-left: 0; }
+  ol.plain li { margin-bottom: .45rem; text-align: justify; }
+  li { margin-bottom: .3rem; }
+  table { width: 100%; border-collapse: collapse; margin: .7rem 0 1.1rem; font-size: 9.6pt; }
+  th, td { border: 1px solid var(--rule); padding: .42rem .55rem; text-align: left; vertical-align: top; }
+  th { background: #f4f1ec; font-weight: 600; }
+  blockquote {
+    margin: .8rem 0 1.1rem; padding: .6rem .9rem; background: #f8f5f0;
+    border-left: 3px solid var(--accent); color: var(--muted); font-size: 9.6pt; font-style: italic;
+  }
+  blockquote p, blockquote { text-align: left; }
+  hr { border: 0; border-top: 1px solid var(--rule); margin: 1.2rem 0; }
+  .page-break { break-after: page; page-break-after: always; height: 0; }
+  .doc-foot {
+    margin-top: 2.2rem; padding-top: .6rem; border-top: 1px solid var(--rule);
+    color: var(--muted); font-size: 8.6pt; font-style: italic;
+  }
+  @page { size: A4; margin: 18mm; }
+  @media print {
+    body { background: #fff; font-size: 10.5pt; }
+    .toolbar { display: none !important; }
+    .sheet { margin: 0; padding: 0; box-shadow: none; max-width: none; }
+    table, blockquote, h2, h3 { break-inside: avoid; }
+    thead { display: table-header-group; }
+  }
+</style>
+</head>
+<body>
+<div class="toolbar">
+      <strong>Inventory and Check-In Report</strong>
+      <span class="hint">Reference TD-2026-0001 · Inventory and Check-In Report</span>
+      <span class="spacer"></span>
+      <button type="button" onclick="window.print()">Print / Save as PDF</button>
+    </div>
+<main class="sheet">
+<h1>Inventory and Check-In Report</h1>
+<table><thead><tr><th>Item</th><th>Detail</th></tr></thead><tbody><tr><td>Property</td><td>12 Bridge Street, Flat 3, Manchester, M1 2AB</td></tr><tr><td>Tenancy start date</td><td>1 November 2026</td></tr><tr><td>Report prepared by</td><td>Jordan Fielding, Bridge Street Lettings Ltd</td></tr><tr><td>Tenant</td><td>Alex Morgan Sam Okafor</td></tr><tr><td>Furnishing</td><td>Unfurnished</td></tr></tbody></table>
+<p>This report records the condition of the Property and its contents on the date of check-in. It is evidence of the condition at the start of the tenancy and is used at check-out to decide whether any damage beyond fair wear and tear has occurred. Please read it, note anything you disagree with in the comments column of each room, and sign section 6.</p>
+<h2>1. How to Read the Condition Grades</h2>
+<table><thead><tr><th>Grade</th><th>Meaning</th></tr></thead><tbody><tr><td>A</td><td>New or as new, no defects</td></tr><tr><td>B</td><td>Good, minor wear consistent with careful use</td></tr><tr><td>C</td><td>Fair, noticeable wear but clean and working</td></tr><tr><td>D</td><td>Poor, damage or defect noted in the comments</td></tr><tr><td>E</td><td>Unusable or missing, replacement needed</td></tr></tbody></table>
+<h2>2. Room-by-Room Record</h2>
+<table><thead><tr><th>Room</th><th>Item</th><th>Condition</th><th>Cleanliness</th><th>Comments</th></tr></thead><tbody><tr><td>Entrance and hall</td><td>Door, lock, floor, walls, ceiling, light fittings</td><td></td><td></td><td></td></tr><tr><td>Living room</td><td>Walls, ceiling, floor, windows, curtains, furniture</td><td></td><td></td><td></td></tr><tr><td>Kitchen</td><td>Units, worktops, sink, taps, oven, hob, extractor, fridge, freezer, washing machine</td><td></td><td></td><td></td></tr><tr><td>Bedroom 1</td><td>Walls, ceiling, floor, windows, curtains, bed, mattress, wardrobe, chest of drawers</td><td></td><td></td><td></td></tr><tr><td>Bedroom 2</td><td>Walls, ceiling, floor, windows, curtains, storage</td><td></td><td></td><td></td></tr><tr><td>Bathroom</td><td>Bath or shower, screen, basin, toilet, tiles, sealant, extractor fan</td><td></td><td></td><td></td></tr><tr><td>Separate WC</td><td>Toilet, cistern, seat, floor, walls</td><td></td><td></td><td></td></tr><tr><td>Hall, stairs and landing</td><td>Walls, ceiling, floor, banister, smoke alarm</td><td></td><td></td><td></td></tr><tr><td>Outside and garden</td><td>Paths, fences, gates, bins, external walls, guttering</td><td></td><td></td><td></td></tr><tr><td>Parking and outbuildings</td><td>Parking space, garage, shed, access</td><td></td><td></td><td></td></tr></tbody></table>
+<h2>3. Safety Equipment Check</h2>
+<table><thead><tr><th>Item</th><th>Fitted</th><th>Tested</th><th>Working</th><th>Notes</th></tr></thead><tbody><tr><td>Smoke alarms (every storey)</td><td>Hallway, landing and living room — tested 01/11/2026</td><td></td><td></td><td></td></tr><tr><td>Carbon monoxide alarms</td><td>Next to the boiler — tested 01/11/2026</td><td></td><td></td><td></td></tr><tr><td>Gas safety record given</td><td>15/09/2026</td><td></td><td></td><td></td></tr><tr><td>Electrical report given</td><td>01/02/2026</td><td></td><td></td><td></td></tr><tr><td>Energy certificate given</td><td>Band C</td><td></td><td></td><td></td></tr><tr><td>How to Rent guide given</td><td>25/10/2026</td><td></td><td></td><td></td></tr></tbody></table>
+<h2>4. Meter Readings</h2>
+<table><thead><tr><th>Meter</th><th>Reading</th><th>Serial number</th><th>Supplier</th></tr></thead><tbody><tr><td>Electricity</td><td></td><td></td><td>Octopus Energy</td></tr><tr><td>Gas</td><td></td><td></td><td>Octopus Energy</td></tr><tr><td>Water</td><td></td><td></td><td>United Utilities</td></tr></tbody></table>
+<h2>5. Keys and Access</h2>
+<table><thead><tr><th>Item</th><th>Number supplied</th><th>Notes</th></tr></thead><tbody><tr><td>Front door key</td><td></td><td></td></tr><tr><td>Back door key</td><td></td><td></td></tr><tr><td>Window or patio keys</td><td></td><td></td></tr><tr><td>Meter box or cupboard key</td><td></td><td></td></tr><tr><td>Fobs or entry devices</td><td></td><td></td></tr><tr><td>Bin store or gate key</td><td></td><td></td></tr></tbody></table>
+<p>All keys listed must be returned at the end of the tenancy. A charge may be made for replacing keys, locks or fobs that are not returned, at the landlord&#39;s reasonable cost.</p>
+<h2>6. Tenant Comments and Agreement</h2>
+<p>Tenant comments and any agreed variations to this report:</p>
+<table><thead><tr><th>Room or item</th><th>Comment</th></tr></thead><tbody><tr><td></td><td></td></tr></tbody></table>
+<p>By signing below, the Tenant confirms that this report is an accurate record of the condition of the Property and its contents at the start of the tenancy, except for any comments recorded above. The Landlord confirms that the items listed were present and in the stated condition.</p>
+<p><strong>Tenant</strong> — Alex Morgan</p>
+<p>Signature: ______________________________________  Date: ____________________</p>
+<p><strong>Tenant</strong> — Sam Okafor</p>
+<p>Signature: ______________________________________  Date: ____________________</p>
+<p><strong>Landlord or agent</strong> — Jordan Fielding for Bridge Street Lettings Ltd</p>
+<p>Signature: ______________________________________  Date: ____________________</p>
+<p>A copy of this signed report has been given to the Tenant and should be kept with the tenancy papers.</p>
+<blockquote><em>This document was assembled by TenancyDesk from a template. It is not legal advice. Always check the current law before signing.</em></blockquote>
+<div class="doc-foot">Prepared with TenancyDesk · Bridge Street Lettings Ltd. Check every detail, and the current law, before signing.</div>
+</main>
+</body>
+</html>
