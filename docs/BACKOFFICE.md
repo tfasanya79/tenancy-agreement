@@ -14,7 +14,7 @@ The first slice of M1 is in the app and covered by tests:
 
 | | |
 | --- | --- |
-| **Our details** | Agency name, address, phone, email, client money protection and redress scheme, negotiator, rent account — saved in the app, no config file |
+| **Our details** | Agency name, address, phone, email, client money protection and redress scheme, negotiator, rent account — saved in the app, no config file. Also the **review mode**: relaxed (ask, then carry on — the default) or strict (hold the documents) |
 | **Properties and rooms** | Add a property and its rooms; each room carries its rent and deposit |
 | **Landlords and tenants** | A register, with how many properties or tenancies each one has |
 | **Prefilled tenancy form** | Every inherited value is filled in and labelled with where it came from; only what differs is typed |
@@ -237,7 +237,7 @@ the most we should ever add. Anything beyond that belongs in their accounting to
 | Migration merges or duplicates entities | Preview, confirm, and make it repeatable; never guess silently |
 | Over-modelling — more structure than prefilling needs | The test for every entity: *does it remove typing, or answer a question the agent asks?* If neither, it does not go in |
 | An inherited value is wrong and several tenancies inherit it | Show provenance on every prefilled field; ask before changing a shared value |
-| A non-UK address slips through | Already handled: a postcode that is not UK-shaped blocks generation. The client has confirmed they let only in England |
+| A non-UK address slips through | Already handled: a postcode that is not UK-shaped is flagged, and the agent is asked before continuing. The client has confirmed they let only in England |
 | The app starts lecturing about law the agency does not track | Checks are graded: only what the *document* needs can block. Everything else is a quiet note |
 
 ---

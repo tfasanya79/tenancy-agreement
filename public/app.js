@@ -1074,14 +1074,27 @@ function renderDocuments() {
             toast('Tick at least one document first.', true);
             return;
           }
-          const result = await api(`/api/packs/${pack.id}/generate`, {
-            method: 'POST',
-            body: JSON.stringify({ templateIds: ids }),
-          });
-          state.detail = result.pack;
-          await refreshPacks();
-          renderMain();
-          toast(`${result.documents.length} document${result.documents.length === 1 ? '' : 's'} generated.`);
+
+          const run = async (confirm) => {
+            const result = await api(`/api/packs/${pack.id}/generate`, {
+              method: 'POST',
+              body: JSON.stringify({ templateIds: ids, ...(confirm ? { confirm: true } : {}) }),
+            });
+            if (result.needsConfirmation === true) {
+              return result;
+            }
+            state.detail = result.pack;
+            await refreshPacks();
+            renderMain();
+            toast(`${result.documents.length} document${result.documents.length === 1 ? '' : 's'} generated.`);
+            return null;
+          };
+
+          const asked = await run(false);
+          if (asked !== null) {
+            // Nothing is refused: they are told, and they decide.
+            askToContinue(asked, () => run(true));
+          }
         } catch (error) {
           toast(error.message, true);
         } finally {
@@ -1359,6 +1372,75 @@ function renderChecks() {
 
 /* ----------------------------------------------------------- back office --- */
 
+/**
+ * "Here is what is outstanding — carry on?" The app never refuses; it asks once.
+ */
+function askToContinue(asked, onContinue) {
+  const close = () => $('#modal-root').replaceChildren();
+
+  const items = (asked.findings ?? []).map((finding) =>
+    el(
+      'div',
+      { class: 'check-item sev-warning' },
+      el('div', {}, el('strong', {}, finding.title), el('p', {}, finding.detail)),
+    ),
+  );
+
+  const strict = asked.canGenerate === false;
+  const continueButton = el(
+    'button',
+    {
+      class: 'btn btn-primary',
+      type: 'button',
+      onClick: async () => {
+        close();
+        await onContinue();
+      },
+    },
+    strict ? 'Generate anyway' : 'Carry on and generate',
+  );
+
+  $('#modal-root').replaceChildren(
+    el(
+      'div',
+      { class: 'modal-backdrop', onClick: (event) => { if (event.target === event.currentTarget) close(); } },
+      el(
+        'div',
+        { class: 'modal', style: { height: 'auto', maxHeight: '85vh' } },
+        el(
+          'div',
+          { class: 'modal-head' },
+          el('h3', {}, 'Before we carry on'),
+          el('button', { class: 'btn btn-sm', type: 'button', onClick: close }, 'Close'),
+        ),
+        el(
+          'div',
+          { style: { padding: '1rem', overflowY: 'auto' } },
+          el(
+            'p',
+            { class: 'small' },
+            strict
+              ? 'Strict mode is on in your settings. Switch it off in Back office → Our details to generate regardless.'
+              : 'These are worth a look, but nothing here stops you. Carry on and the pack is produced exactly as it stands, and we will note what you chose to proceed with.',
+          ),
+          ...items,
+          el(
+            'div',
+            { class: 'form-actions' },
+            el('span', { class: 'small' }, `${items.length} item${items.length === 1 ? '' : 's'}`),
+            el(
+              'div',
+              { style: { display: 'flex', gap: '.4rem' } },
+              el('button', { class: 'btn', type: 'button', onClick: close }, 'I’ll fix them first'),
+              continueButton,
+            ),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
 const BO_TABS = [
   ['settings', 'Our details'],
   ['properties', 'Properties & rooms'],
@@ -1447,6 +1529,13 @@ function renderSettingsSection(data) {
 
   const read = (key) => $(`#set-${key}`).value.trim();
 
+  const modeSelect = el(
+    'select',
+    { id: 'set-reviewMode' },
+    el('option', { value: 'relaxed', selected: (s.reviewMode ?? 'relaxed') === 'relaxed' }, 'Relaxed — ask me, then carry on'),
+    el('option', { value: 'strict', selected: s.reviewMode === 'strict' }, 'Strict — hold the documents until I fix it'),
+  );
+
   return el(
     'div',
     { class: 'bo-grid' },
@@ -1492,6 +1581,7 @@ function renderSettingsSection(data) {
                     redressScheme: read('redressScheme'),
                     negotiator: read('negotiator'),
                     rentAccount: read('rentAccount'),
+                    reviewMode: $('#set-reviewMode').value,
                   }),
                 });
                 toast('Your details are saved.');
@@ -1505,6 +1595,17 @@ function renderSettingsSection(data) {
           'Save our details',
         ),
       ),
+    ),
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'How much should the app push back?'),
+      el(
+        'p',
+        { class: 'small' },
+        'This is your paperwork and your decision. In relaxed mode nothing is ever refused: you are told what is outstanding and asked whether to carry on, and the choice is recorded on the pack.',
+      ),
+      el('div', { class: 'field' }, el('label', { for: 'set-reviewMode' }, 'When something looks missing or wrong'), modeSelect),
     ),
   );
 }

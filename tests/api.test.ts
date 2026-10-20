@@ -189,6 +189,51 @@ describe('documents', () => {
     assert.equal(body.pack.pack.status, 'generated');
   });
 
+  it('asks before generating an incomplete pack, then generates on confirmation', async () => {
+    const pack = await createPack();
+
+    const first = await app.inject({
+      method: 'POST',
+      url: `/api/packs/${pack.id}/generate`,
+      payload: {},
+    });
+    assert.equal(first.statusCode, 200);
+    const asked = first.json();
+    assert.equal(asked.needsConfirmation, true, 'an incomplete pack asks rather than refuses');
+    assert.equal(asked.canGenerate, true, 'relaxed mode never blocks');
+    assert.equal(asked.documents.length, 0, 'nothing is written before the agent agrees');
+    assert.ok(asked.findings.length > 0);
+
+    const second = await app.inject({
+      method: 'POST',
+      url: `/api/packs/${pack.id}/generate`,
+      payload: { confirm: true },
+    });
+    assert.equal(second.statusCode, 200);
+    assert.ok(second.json().documents.length > 0);
+
+    // Choosing to carry on is recorded as a note, not as a refusal.
+    const detail = (await app.inject({ method: 'GET', url: `/api/packs/${pack.id}` })).json();
+    assert.ok(
+      detail.pack.notes.some((note: { text: string }) => note.text.startsWith('Generated with')),
+      'the acknowledgement is on the record',
+    );
+  });
+
+  it('generates a complete pack without asking', async () => {
+    const pack = await createPack();
+    await app.inject({ method: 'PATCH', url: `/api/packs/${pack.id}`, payload: { fields: completeFields() } });
+
+    const response = await app.inject({
+      method: 'POST',
+      url: `/api/packs/${pack.id}/generate`,
+      payload: { templateIds: ['test-agreement'] },
+    });
+    const body = response.json();
+    assert.equal(body.needsConfirmation, undefined);
+    assert.equal(body.documents.length, 1);
+  });
+
   it('rejects an unknown template id', async () => {
     const pack = await readyPack();
     const response = await app.inject({

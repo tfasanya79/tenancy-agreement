@@ -8,6 +8,38 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed — the app asks, it does not police
+
+The client's steer, stated plainly: this is their software, not their regulator. The
+app should tell them what is outstanding and let them decide.
+
+Generation no longer refuses. `src/docs/gate.ts` decides only whether to **ask**:
+
+| Mode | Behaviour |
+| --- | --- |
+| **relaxed** (default) | Nothing blocks. Outstanding items are put in front of the agent with a question: carry on, or fix them first |
+| **strict** | Holds the documents until the items are resolved, for anyone who wants the guardrail |
+
+Switched in **Back office → Our details**. Relaxed is the default because we know
+their process better than we know their circumstances.
+
+- `POST /api/packs/:id/generate` returns `needsConfirmation` with the findings instead
+  of an error, and writes nothing until `confirm: true` arrives.
+- `generate_documents` gained a `confirm` argument. The assistant's first call asks;
+  when the agent says go ahead, it calls again and the documents are produced.
+- Choosing to carry on is recorded as a note on the pack — a record, not a lecture.
+- Assistant rules rewritten: it is not their regulator, it never leaves them stuck,
+  it states the facts once and asks, and it does not repeat a warning after they have
+  acknowledged it.
+
+Verified live against DeepSeek with a deliberately bad postcode: the assistant asked
+*"Would you like to give me the correct postcode, or shall I go ahead as it stands?"*,
+then produced all six documents on the next turn and moved on to the real deadlines.
+
+216 tests, including `gate.test.ts` (relaxed never blocks; strict holds; only serious
+findings prompt) and an API test covering ask → confirm → generate → note recorded.
+
+
 ### Added — the back office, and forms that fill themselves
 
 The client's two asks: manage tenancies in one place, and stop retyping what has not

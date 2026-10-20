@@ -13,6 +13,8 @@
 import { randomUUID } from 'node:crypto';
 import type { DatabaseSync } from 'node:sqlite';
 
+import type { ReviewMode } from '../docs/gate.ts';
+
 export type Lifecycle = 'upcoming' | 'active' | 'ending' | 'ended';
 
 export const LIFECYCLES: readonly Lifecycle[] = ['upcoming', 'active', 'ending', 'ended'];
@@ -70,6 +72,8 @@ export type AgencySettings = {
   redressScheme: string;
   negotiator: string;
   rentAccount: string;
+  /** How insistently the app behaves about outstanding findings. */
+  reviewMode: ReviewMode;
 };
 
 export const EMPTY_AGENCY: AgencySettings = {
@@ -81,6 +85,7 @@ export const EMPTY_AGENCY: AgencySettings = {
   redressScheme: '',
   negotiator: '',
   rentAccount: '',
+  reviewMode: 'relaxed',
 };
 
 const SCHEMA = `
@@ -145,7 +150,8 @@ CREATE TABLE IF NOT EXISTS agency_settings (
   client_money_scheme TEXT NOT NULL DEFAULT '',
   redress_scheme      TEXT NOT NULL DEFAULT '',
   negotiator          TEXT NOT NULL DEFAULT '',
-  rent_account        TEXT NOT NULL DEFAULT ''
+  rent_account        TEXT NOT NULL DEFAULT '',
+  review_mode         TEXT NOT NULL DEFAULT 'relaxed'
 );
 `;
 
@@ -184,6 +190,7 @@ export class BackOffice {
     this.db = db;
     this.db.exec(SCHEMA);
     addMissingColumns(this.db, 'packs', PACK_COLUMNS);
+    addMissingColumns(this.db, 'agency_settings', { review_mode: "TEXT NOT NULL DEFAULT 'relaxed'" });
   }
 
   /* --- agency settings --------------------------------------------------- */
@@ -200,6 +207,7 @@ export class BackOffice {
       redressScheme: text(row, 'redress_scheme'),
       negotiator: text(row, 'negotiator'),
       rentAccount: text(row, 'rent_account'),
+      reviewMode: text(row, 'review_mode') === 'strict' ? 'strict' : 'relaxed',
     };
   }
 
@@ -208,12 +216,12 @@ export class BackOffice {
     const next: AgencySettings = { ...current, ...patch };
     this.db
       .prepare(
-        `INSERT INTO agency_settings (id, name, address, phone, email, client_money_scheme, redress_scheme, negotiator, rent_account)
-         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?)
+        `INSERT INTO agency_settings (id, name, address, phone, email, client_money_scheme, redress_scheme, negotiator, rent_account, review_mode)
+         VALUES (1, ?, ?, ?, ?, ?, ?, ?, ?, ?)
          ON CONFLICT(id) DO UPDATE SET
            name = excluded.name, address = excluded.address, phone = excluded.phone, email = excluded.email,
            client_money_scheme = excluded.client_money_scheme, redress_scheme = excluded.redress_scheme,
-           negotiator = excluded.negotiator, rent_account = excluded.rent_account`,
+           negotiator = excluded.negotiator, rent_account = excluded.rent_account, review_mode = excluded.review_mode`,
       )
       .run(
         next.name,
@@ -224,6 +232,7 @@ export class BackOffice {
         next.redressScheme,
         next.negotiator,
         next.rentAccount,
+        next.reviewMode,
       );
     return next;
   }

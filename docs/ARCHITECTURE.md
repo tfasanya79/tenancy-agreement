@@ -19,7 +19,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 209 tests on `node:test` |
+| Tests | `tests/` | 216 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -274,6 +274,7 @@ data directory.
 | Add or change an endpoint | `src/app.ts` |
 | Change the interface | `public/app.js`, `public/styles.css` |
 | Change the ZIP contents sheet | `src/docs/packSummary.ts` |
+| Change when the app asks before generating | `src/docs/gate.ts` |
 | Change what the audit flags | `src/docs/templateAudit.ts` |
 | Change how a document's values are substituted | `src/docs/docxFill.ts` |
 | Change how a value is formatted (`£1,450`, `1 November 2026`) | `formatLike()` in `src/docs/docxFill.ts` |
@@ -341,6 +342,7 @@ exercises the whole path with a document shaped like a letting agency's.
 | `agent.test.ts` | DeepSeek client (errors, retries, tool parsing), each tool, the loop, the prompt |
 | `audit.test.ts` | The agreement audit, including a guard that all nine shipped templates pass it |
 | `backoffice.test.ts` | Inheritance precedence and provenance, migration preview and apply, and a three-field tenancy rendering a real document |
+| `gate.test.ts` | Relaxed mode never blocks and always asks; strict mode holds; only serious findings prompt |
 | `docxFill.test.ts` | ZIP round trip, reading a `.docx`, substituting values across split runs, formatting preservation, and targeting an ambiguous value |
 
 Tests never touch the project's real `data/` folder — `tests/helpers.ts` hands out

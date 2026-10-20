@@ -270,7 +270,7 @@ Run automatically, every time, on every pack.
 | Notice period | A tenant's two months is stated correctly |
 | Agency disclosure | Client money protection and redress scheme named |
 
-Errors block document generation. Warnings do not — sometimes the right answer is
+Nothing blocks document generation. That is deliberate: this is the agency's own paperwork, and they decide. In the default **relaxed** mode the app tells them what is outstanding and asks whether to carry on; what they chose is recorded on the pack. Warnings do not prompt at all — sometimes the right answer is
 "yes, I know, and it is fine", and the app is not going to argue with you.
 
 The Checks tab also shows the **statutory deadlines** for the pack: the date the
@@ -413,7 +413,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     209 tests
+├── tests/                     216 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -430,7 +430,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 209 tests |
+| `pnpm test` | Run the 216 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm sample` | Rebuild `samples/` from the templates |
@@ -528,7 +528,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 209 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 216 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
@@ -559,7 +559,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 209 tests
+pnpm test        # 216 tests
 pnpm typecheck
 ```
 

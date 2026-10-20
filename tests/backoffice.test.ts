@@ -112,7 +112,7 @@ describe('inheritance', () => {
       tenancy: { 'tenancy.rent_amount': '', 'tenants': [{ full_name: 'Alex' }] },
       agency: {
         name: '', address: '', phone: '', email: '',
-        clientMoneyScheme: '', redressScheme: '', negotiator: '', rentAccount: '',
+        clientMoneyScheme: '', redressScheme: '', negotiator: '', rentAccount: '', reviewMode: 'relaxed',
       },
       room: {
         id: 'r', propertyId: 'p', roomNumber: '2', rentAmount: 1300,

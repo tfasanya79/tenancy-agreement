@@ -71,6 +71,7 @@ async function runtime() {
       // These unit tests exercise the tools without back-office inheritance.
       effective: (packId: string) => store.getPack(packId).fields,
       provenance: () => ({}) as Record<string, string>,
+      reviewMode: () => 'relaxed' as const,
     },
   };
 }
@@ -172,12 +173,22 @@ describe('tools', () => {
     context.store.close();
   });
 
-  it('will not generate documents while a compliance error remains', async () => {
+  it('asks before generating when something is outstanding, then does it', async () => {
     const context = await runtime();
-    const outcome = await executeTool('generate_documents', {}, context.runtime);
-    assert.equal(outcome.ok, false);
-    assert.match(String((outcome.result as { error: string }).error), /compliance errors/);
-    assert.equal(context.store.listDocuments(context.pack.id).length, 0);
+
+    // First attempt: no refusal, just a question.
+    const first = await executeTool('generate_documents', {}, context.runtime);
+    assert.equal(first.ok, true, 'a missing detail must not be an error');
+    const asked = first.result as { needs_confirmation: boolean; outstanding: unknown[] };
+    assert.equal(asked.needs_confirmation, true);
+    assert.ok(asked.outstanding.length > 0);
+    assert.equal(context.store.listDocuments(context.pack.id).length, 0, 'nothing is written until they confirm');
+
+    // Second attempt, after the agent says carry on.
+    const second = await executeTool('generate_documents', { confirm: true }, context.runtime);
+    assert.equal(second.ok, true);
+    const result = second.result as { generated: unknown[] };
+    assert.ok(result.generated.length >= 1);
     context.store.close();
   });
 

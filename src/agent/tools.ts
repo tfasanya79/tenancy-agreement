@@ -11,6 +11,7 @@
 import { randomUUID } from 'node:crypto';
 
 import { runComplianceChecks } from '../docs/compliance.ts';
+import { reviewGate, type ReviewMode } from '../docs/gate.ts';
 import { labelFor, mergeFields, missingCoreFields } from '../docs/fields.ts';
 import { generateDocuments } from '../docs/generate.ts';
 import { tenantNameFrom, propertyAddressFrom, type Store } from '../db.ts';
@@ -32,6 +33,8 @@ export type ToolRuntime = {
   effective: (packId: string) => Record<string, unknown>;
   /** Where each effective value came from, so the agent can explain it. */
   provenance: (packId: string) => Record<string, string>;
+  /** relaxed asks before generating; strict refuses. */
+  reviewMode: () => ReviewMode;
   today?: Date;
 };
 
@@ -89,10 +92,14 @@ export const TOOL_DEFINITIONS: readonly ToolDefinition[] = [
     function: {
       name: 'generate_documents',
       description:
-        'Create the finished documents (Word, print-ready HTML and Markdown) for the pack. Omit template_ids to generate every recommended document. Refuses to run while any compliance error remains.',
+        'Create the finished documents (Word, print-ready HTML and Markdown) for the pack. Omit template_ids to generate every recommended document. If anything outstanding is reported, the first call returns needs_confirmation: tell the agent what it is and ask whether to carry on; if they agree, call again with confirm: true.',
       parameters: {
         type: 'object',
         properties: {
+          confirm: {
+            type: 'boolean',
+            description: 'Set to true only after the agent has said to carry on despite the outstanding items.',
+          },
           template_ids: {
             type: 'array',
             items: { type: 'string' },
@@ -266,14 +273,23 @@ export async function executeTool(
       case 'generate_documents': {
         const effective = runtime.effective(runtime.packId);
         const compliance = runComplianceChecks(effective, { today });
-        if (!compliance.ok) {
+        const gate = reviewGate(compliance, runtime.reviewMode());
+
+        // The first attempt asks; the second, with confirm, produces the documents.
+        if (gate.needsConfirmation && args['confirm'] !== true) {
           return {
-            ok: false,
+            ok: true,
             result: {
-              error: 'There are compliance errors that must be fixed before generating documents.',
-              errors: compliance.findings
-                .filter((finding) => finding.severity === 'error')
-                .map((finding) => ({ title: finding.title, detail: finding.detail, fields: finding.fields ?? [] })),
+              needs_confirmation: true,
+              can_generate: gate.canGenerate,
+              message: gate.message,
+              outstanding: gate.outstanding.map((finding) => ({
+                title: finding.title,
+                detail: finding.detail,
+                fields: finding.fields ?? [],
+              })),
+              instruction:
+                'Tell the agent what these are and why they matter, then ask whether to go ahead. If they say yes, call generate_documents again with confirm: true.',
             },
           };
         }

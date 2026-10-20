@@ -16,6 +16,7 @@ import { LIFECYCLES } from './backoffice/entities.ts';
 import { ENV_DEFAULTS, FIELDS, GROUPS, CORE_FIELDS } from './docs/fields.ts';
 import { mergeFields } from './docs/fields.ts';
 import { runComplianceChecks } from './docs/compliance.ts';
+import { REVIEW_MODES, reviewGate, type ReviewMode } from './docs/gate.ts';
 import { generateDocuments } from './docs/generate.ts';
 import { assessPack, renderTemplate, type TemplateRegistry } from './docs/registry.ts';
 import { RULES_REVIEWED_ON, searchRules } from './knowledge/rules.ts';
@@ -224,6 +225,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ...(pick('redressScheme') === undefined ? {} : { redressScheme: pick('redressScheme') as string }),
       ...(pick('negotiator') === undefined ? {} : { negotiator: pick('negotiator') as string }),
       ...(pick('rentAccount') === undefined ? {} : { rentAccount: pick('rentAccount') as string }),
+      ...(typeof body['reviewMode'] === 'string' && (REVIEW_MODES as readonly string[]).includes(body['reviewMode'] as string)
+        ? { reviewMode: body['reviewMode'] as ReviewMode }
+        : {}),
     });
   });
 
@@ -466,16 +470,50 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       if (unknown.length > 0) return badRequest(reply, `Unknown document(s): ${unknown.join(', ')}`);
     }
 
+    const fields = effectiveFor(pack);
+    const gate = reviewGate(runComplianceChecks(fields), backOffice.getSettings().reviewMode);
+
+    // Ask once before carrying on, rather than refusing to work. Strict mode
+    // turns the same question into a refusal.
+    const confirmed = body['confirm'] === true;
+    if (gate.needsConfirmation && !confirmed) {
+      return {
+        needsConfirmation: true,
+        canGenerate: gate.canGenerate,
+        mode: gate.mode,
+        message: gate.message,
+        findings: gate.outstanding,
+        documents: [],
+        pack: packDetail(pack),
+      };
+    }
+
     const generated = await generateDocuments({
       store,
       registry,
       packId: pack.id,
-      fields: effectiveFor(pack),
+      fields,
       ...(templateIds === undefined ? {} : { templateIds }),
       fallbackFields: currentAgency(),
     });
 
-    return { documents: generated, pack: packDetail(store.getPack(pack.id)) };
+    // If they chose to carry on, leave a note saying so. A record, not a lecture.
+    if (gate.needsConfirmation && gate.canGenerate) {
+      store.updatePack(pack.id, {
+        notes: [
+          ...store.getPack(pack.id).notes,
+          {
+            id: crypto.randomUUID(),
+            text: `Generated with ${gate.outstanding.length} outstanding item${gate.outstanding.length === 1 ? '' : 's'} acknowledged: ${gate.outstanding
+              .map((finding) => finding.title)
+              .join('; ')}.`,
+            createdAt: new Date().toISOString(),
+          },
+        ],
+      });
+    }
+
+    return { documents: generated, pack: packDetail(store.getPack(pack.id)), gate };
   });
 
   app.get('/api/documents/:id/download', async (request, reply) => {
@@ -611,6 +649,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           fallbackFields: currentAgency(),
           effective: (packId: string) => effectiveFor(store.getPack(packId)),
           provenance: (packId: string) => contextFor(store.getPack(packId), backOffice).resolved.provenance,
+          reviewMode: () => backOffice.getSettings().reviewMode,
         },
         userMessage: message,
         onEvent: send,

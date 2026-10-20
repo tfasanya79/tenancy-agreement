@@ -77,6 +77,11 @@ function summarise(name: string, outcome: { ok: boolean; result: unknown }): str
       return `${counts.error} error${counts.error === 1 ? '' : 's'}, ${counts.warning} warning${counts.warning === 1 ? '' : 's'}.`;
     }
     case 'generate_documents': {
+      // The first call asks rather than producing anything.
+      if ((result as { needs_confirmation?: boolean }).needs_confirmation === true) {
+        const count = (result as { outstanding?: unknown[] }).outstanding?.length ?? 0;
+        return `Waiting for your go-ahead${count > 0 ? ` — ${count} item${count === 1 ? '' : 's'} to weigh up` : ''}.`;
+      }
       const generated = (result as { generated?: unknown[] }).generated ?? [];
       return `${generated.length} document${generated.length === 1 ? '' : 's'} generated.`;
     }
