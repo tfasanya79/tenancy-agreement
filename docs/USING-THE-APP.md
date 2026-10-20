@@ -96,6 +96,11 @@ The buttons above the message box do the first four in one click.
 
 **The draft appears in the chat**, ready to read and copy — not just a note saying it was saved. It is also kept on the pack: you will find it again under **Documents → Message to the tenant**, with a Copy button for each version.
 
+**Replies are laid out properly.** A heading like *Email* appears as a heading, a list
+as a list, and the lines of a letter stay on their own lines. Hover over a reply for a
+**Copy** button: it copies the words without the formatting, so they paste straight
+into an email.
+
 **It will not make things up.** If it does not have a date or an amount, it asks.
 If you tell it something that is not in a document, it will suggest a note rather
 than quietly editing legal wording.

@@ -29,6 +29,29 @@ Verified live: the reply now carries a full email (subject, greeting, dates, ren
 deposit, sign-off) and a short WhatsApp message, with one closing line about the
 deposit deadline.
 
+### Changed — replies are rendered, not dumped
+
+The assistant writes Markdown, and the chat showed the source: `**Email**` on its
+own line, asterisks around every bold word, a letter flattened into one wall of
+text. It read like a broken file, which is a poor way to present words meant to be
+sent to a tenant.
+
+Replies are now rendered: labels (**Email**, **WhatsApp**) become quiet small-caps
+headings, `**bold**` becomes bold, a list becomes a list, single line breaks are
+kept — so a letter keeps its greeting, paragraphs and sign-off. Bold labels,
+italic, inline code, links, headings, numbered steps, quotes and rules all render.
+Markdown inside a reply is built with the DOM and never with `innerHTML`, and only
+`http(s)`, `mailto:` and same-site links are clickable, so a template or an email
+cannot inject anything into the page.
+
+Each reply also gets a **Copy** button (visible on hover) that copies the words
+*without* the Markdown — ready to paste into an email or WhatsApp. Messages the
+agent types are shown exactly as typed.
+
+The instructions now tell the assistant that the words the tenant receives are
+plain text — no asterisks or headings inside a draft — and that a `**label**` goes
+on its own line above each one.
+
 
 ### Added — M5: evidence, explanations and a tenant summary
 

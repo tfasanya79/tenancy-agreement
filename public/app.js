@@ -491,7 +491,7 @@ function renderAssistant() {
           'div',
           { class: 'msg msg-user' },
           el('div', { class: 'msg-avatar' }, 'You'),
-          el('div', { class: 'msg-bubble' }, ...renderMessageText(message.text)),
+          el('div', { class: 'msg-bubble' }, ...renderMessageText(message.text, { markdown: false })),
         ),
       );
       continue;
@@ -521,9 +521,10 @@ function renderAssistant() {
         el('div', { class: 'msg-avatar' }, 'TD'),
         el(
           'div',
-          { style: { display: 'grid', gap: '.5rem' } },
+          { class: 'msg-body' },
           trace,
           el('div', { class: 'msg-bubble' }, ...renderMessageText(message.text)),
+          copyReplyButton(message.text),
         ),
       ),
     );
@@ -606,23 +607,188 @@ function renderAssistant() {
   return content;
 }
 
-function renderMessageText(text) {
-  const nodes = [];
-  const blocks = String(text).split(/\n{2,}/);
-  for (const block of blocks) {
-    const lines = block.split('\n').filter((line) => line.trim() !== '');
-    if (lines.length === 0) continue;
-    const bulleted = lines.every((line) => /^[-*•]\s+/.test(line.trim()));
-    if (bulleted) {
-      nodes.push(el('ul', {}, ...lines.map((line) => el('li', {}, line.replace(/^[-*•]\s+/, '')))));
-    } else if (lines.every((line) => /^\d+[.)]\s+/.test(line.trim()))) {
-      nodes.push(el('ol', {}, ...lines.map((line) => el('li', {}, line.replace(/^\d+[.)]\s+/, '')))));
-    } else {
-      nodes.push(el('p', {}, lines.join(' ')));
+/* -- message formatting -----------------------------------------------------
+   The assistant writes Markdown. Showing the source is what made a drafted
+   letter land as a wall of asterisks, so a reply is rendered: bold, italic,
+   code, links, headings, labels, bullets, numbered steps and quotes. Line
+   breaks are kept as written, because a letter has lines that matter.
+
+   Nothing here trusts the text. Every node is built with the DOM, never
+   innerHTML, and only http(s), mailto: and same-site links become clickable.
+   This block is deliberately self-contained so the tests can load it into a
+   stub DOM — see tests/message-format.test.ts. */
+
+// One pattern, but a fresh copy per call: inlineNodes recurses into its own
+// matches, and a shared /g regex would have its lastIndex reset mid-scan.
+const INLINE_SOURCE = '(\\*\\*[^*\\n]+\\*\\*|`[^`\\n]+`|\\*[^*\\n]+\\*|\\[[^\\]\\n]+\\]\\([^)\\s]+\\))';
+const BULLET_LINE = /^[-*•+]\s+/;
+const NUMBER_LINE = /^\d+[.)]\s+/;
+const RULE_LINE = /^(?:-{3,}|\*{3,}|_{3,})$/;
+
+function inlineNode(token) {
+  if (token.startsWith('`')) return el('code', {}, token.slice(1, -1));
+  if (token.startsWith('**')) return el('strong', {}, ...inlineNodes(token.slice(2, -2)));
+  if (token.startsWith('[')) {
+    const parts = /^\[([^\]]+)\]\(([^)\s]+)\)$/.exec(token);
+    const href = parts ? parts[2] : '';
+    if (href !== '' && /^(https?:\/\/|mailto:|\/)/i.test(href)) {
+      return el('a', { href, target: '_blank', rel: 'noopener noreferrer' }, parts[1]);
     }
+    return document.createTextNode(token);
   }
-  if (nodes.length === 0) nodes.push(el('p', {}, String(text)));
+  return el('em', {}, ...inlineNodes(token.slice(1, -1)));
+}
+
+function inlineNodes(text) {
+  const source = String(text);
+  const pattern = new RegExp(INLINE_SOURCE, 'g');
+  const nodes = [];
+  let last = 0;
+  for (let match = pattern.exec(source); match !== null; match = pattern.exec(source)) {
+    if (match.index > last) nodes.push(document.createTextNode(source.slice(last, match.index)));
+    nodes.push(inlineNode(match[0]));
+    last = match.index + match[0].length;
+  }
+  if (last < source.length) nodes.push(document.createTextNode(source.slice(last)));
   return nodes;
+}
+
+function renderMessageText(text, options = {}) {
+  const markdown = options.markdown !== false;
+  const inline = (value) => (markdown ? inlineNodes(value) : [document.createTextNode(String(value))]);
+  const lines = String(text ?? '').replace(/\r\n?/g, '\n').split('\n');
+  const nodes = [];
+  let paragraph = [];
+
+  const flush = () => {
+    if (paragraph.length === 0) return;
+    const children = [];
+    paragraph.forEach((line, index) => {
+      if (index > 0) children.push(el('br'));
+      children.push(...inline(line));
+    });
+    nodes.push(el('p', {}, ...children));
+    paragraph = [];
+  };
+
+  for (let index = 0; index < lines.length; index += 1) {
+    const line = lines[index].trim();
+
+    if (line === '') {
+      flush();
+      continue;
+    }
+
+    if (markdown && RULE_LINE.test(line)) {
+      flush();
+      nodes.push(el('hr'));
+      continue;
+    }
+
+    const heading = markdown ? /^(#{1,4})\s+(.+)$/.exec(line) : null;
+    if (heading) {
+      flush();
+      nodes.push(el(heading[1].length <= 2 ? 'h4' : 'h5', {}, ...inline(heading[2])));
+      continue;
+    }
+
+    // A line that is nothing but **Email** is a label, not a sentence.
+    const label = markdown ? /^\*\*([^*]+)\*\*:?$/.exec(line) : null;
+    if (label) {
+      flush();
+      nodes.push(el('div', { class: 'msg-label' }, ...inline(label[1])));
+      continue;
+    }
+
+    if (markdown && /^>\s?/.test(line)) {
+      flush();
+      const quoted = [];
+      while (index < lines.length && /^>\s?/.test(lines[index].trim())) {
+        quoted.push(lines[index].trim().replace(/^>\s?/, ''));
+        index += 1;
+      }
+      index -= 1;
+      nodes.push(el('blockquote', {}, ...renderMessageText(quoted.join('\n'), { markdown })));
+      continue;
+    }
+
+    if (markdown && (BULLET_LINE.test(line) || NUMBER_LINE.test(line))) {
+      flush();
+      const ordered = NUMBER_LINE.test(line);
+      const marker = ordered ? NUMBER_LINE : BULLET_LINE;
+      const items = [];
+      while (index < lines.length) {
+        const current = lines[index].trim();
+        if (marker.test(current)) {
+          items.push([current.replace(marker, '')]);
+        } else if (items.length > 0 && /^\s{2,}\S/.test(lines[index]) && !RULE_LINE.test(current)) {
+          // An indented line under a bullet carries on that bullet.
+          items[items.length - 1].push(current);
+        } else {
+          break;
+        }
+        index += 1;
+      }
+      index -= 1;
+      nodes.push(
+        el(
+          ordered ? 'ol' : 'ul',
+          {},
+          ...items.map((itemLines) => {
+            const children = [];
+            itemLines.forEach((itemLine, position) => {
+              if (position > 0) children.push(el('br'));
+              children.push(...inline(itemLine));
+            });
+            return el('li', {}, ...children);
+          }),
+        ),
+      );
+      continue;
+    }
+
+    paragraph.push(line);
+  }
+
+  flush();
+  if (nodes.length === 0) nodes.push(el('p', {}, String(text ?? '')));
+  return nodes;
+}
+
+/** The same words without the Markdown, for pasting into an email or WhatsApp. */
+function messagePlainText(text) {
+  return String(text ?? '')
+    .replace(/\r\n?/g, '\n')
+    .replace(/^#{1,4}\s+/gm, '')
+    .replace(/^>\s?/gm, '')
+    .replace(/^[^\S\n]*[-*•+][^\S\n]+/gm, '- ')
+    .replace(/\*\*([^*\n]+)\*\*/g, '$1')
+    .replace(/`([^`\n]+)`/g, '$1')
+    .replace(/\*([^*\n]+)\*/g, '$1')
+    .replace(/\[([^\]\n]+)\]\(([^)\s]+)\)/g, '$1 ($2)')
+    .trim();
+}
+
+/* -- end message formatting ------------------------------------------------- */
+
+/** Copy a reply as the words to send — Markdown stripped, not pasted. */
+function copyReplyButton(markdown) {
+  const text = messagePlainText(markdown);
+  if (text === '') return null;
+
+  const button = el('button', { class: 'msg-copy', type: 'button', title: 'Copy these words' }, 'Copy');
+  button.addEventListener('click', async () => {
+    try {
+      await navigator.clipboard.writeText(text);
+      button.textContent = 'Copied';
+    } catch {
+      button.textContent = 'Select it by hand';
+    }
+    setTimeout(() => {
+      button.textContent = 'Copy';
+    }, 1800);
+  });
+  return button;
 }
 
 async function sendMessage(text) {
