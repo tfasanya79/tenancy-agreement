@@ -33,7 +33,6 @@ erDiagram
     AGENCY ||--o{ LANDLORD : "acts for"
     LANDLORD ||--o{ PROPERTY : owns
     PROPERTY ||--o{ ROOM : "divided into"
-    PROPERTY ||--o{ CERTIFICATE : holds
     ROOM ||--o{ TENANCY : "let by"
     PROPERTY ||--o{ TENANCY : "let whole"
     TENANT ||--o{ TENANCY : "party to"
@@ -47,7 +46,6 @@ erDiagram
 | **Landlord** | Name, address, contact details | Client |
 | **Property** | Address, postcode, council, EPC rating and reference, property type, furnished status | Address |
 | **Room** | Room number, rent, deposit, status (let / void) | Room |
-| **Certificate** | Gas safety, EICR, EPC, right to rent, alarms — each with issue date and expiry | Property |
 | **Tenant** | Name, email, phone, date of birth, ID checked | Person |
 | **Tenancy** | The link: room or property + tenant(s) + start date + status. **This is what we currently call a pack.** | Each letting |
 | **Deposit** | Amount, scheme, scheme reference, received date, protected date | Each letting |
@@ -116,22 +114,28 @@ rather than from the internal catalogue:
 | Extras | all of it, always | a fixed "compliance" section + a collapsed "everything else" |
 
 Their room-only contract needs: house address, room number, rent, contract start
-date, payment date, schedule-of-condition date, tenant name, tenant email. Eight
-fields, in the order the contract asks for them — which is exactly the list they
-sent by hand.
+date, payment date, schedule-of-condition date, tenant name, tenant email — plus the
+deposit scheme name, the agreement date and the bank details for rent. Fifteen values,
+in the order the contract asks for them, and the eight they listed by hand are exactly
+the ones that change between tenants. The full inventory, with what each document
+records and what it only refers to, is in [TENANT-RECORDS.md](TENANT-RECORDS.md).
 
-**Three sections, in this order:**
+**Two sections, in this order:**
 
 1. **This contract needs** — generated from the document, in document order, with
    inherited values shown as grey text and editable.
-2. **Compliance records** — gas safety, EICR, right to rent, How to Rent, alarms.
-   Not in their contract, but legally required, and they drive the deadlines.
-3. **Everything else** — the full catalogue, collapsed, for the rare tenancy that
+2. **Everything else** — the full catalogue, collapsed, for the rare tenancy that
    needs it (guarantor, pets detail, special terms).
 
-The compliance section is the one place we deliberately depart from "follow their
-document": the documents do not record those dates, but the app must, or it cannot
-warn anybody about anything.
+There is deliberately **no compliance section**. An earlier draft proposed one, on the
+assumption that the agency's documents omit gas safety, EICR, EPC, right to rent and the
+How to Rent guide. Reading their files showed the opposite: those topics are all in the
+contract, but only as obligations and references — "the Gas Safety Inspection Report …
+may be served on you" — never as values to record. Asking for them would add friction
+to every tenancy for information their process does not use.
+
+The legal checks therefore stay, but quietly: they advise and never block. What blocks
+generation is a value the *document* needs and does not have.
 
 ---
 
@@ -139,9 +143,9 @@ warn anybody about anything.
 
 | Screen | Purpose |
 | --- | --- |
-| **Dashboard** | What needs doing now: deadlines in the next 30 days across every tenancy, certificates expiring, deposits unprotected, voids |
-| **Tenancies** | The current pack list, with status: upcoming / active / ending / ended |
-| **Properties** | One per address; opens to rooms, certificates, tenancies, landlord |
+| **Dashboard** | What needs doing now: deposits unprotected, deposits due back, tenancies starting or ending in the next 30 days, voids |
+| **Tenancies** | The current pack list, with the full lifecycle: upcoming / active / ending / ended |
+| **Properties** | One per address; opens to rooms, current and past tenancies, the landlord |
 | **Tenants** | A searchable register with tenancy history — "what did we sign with this person, and when" |
 | **Landlords** | Clients, and the properties and tenancies they own |
 | **Settings** | Agency details, schemes, negotiator, document templates, API key status, backup, export |
@@ -164,11 +168,39 @@ There are already packs in `data/`. They must not be lost or corrupted.
 
 ---
 
+## Money: record it, do not account for it
+
+The client asked what we recommend. **Record the facts; do not build a ledger.**
+
+Their own contract already says payment is made through "our payment portal", so a
+payment system exists and works. Rebuilding it would add complexity, duplicate a
+working process, and put us in the position of getting someone's rent wrong.
+
+| In the app | Not in the app |
+| --- | --- |
+| Rent amount, rent period, the day it is due | A ledger of monthly payments |
+| Deposit amount, scheme, scheme reference | Arrears tracking or chasing |
+| The date the deposit was received, and when it was protected | Receipts, invoices, statements |
+| The date a deposit was returned, and any deduction agreed | Bank reconciliation |
+| Whether the deposit is still held | Interest calculations, statements of account |
+
+The one exception worth keeping is the **deposit**, because their documents promise
+things about it — protected within 30 days, held by a named scheme — so the app can
+show the deadline their own words created. That is helpful, not bookkeeping.
+
+If they later want it, a single "rent paid this month: yes / no" tick per tenancy is
+the most we should ever add. Anything beyond that belongs in their accounting tool.
+
+---
+
 ## What I would deliberately not build
 
-- **Rent ledger, arrears, receipts.** Accounting is a solved problem with good cheap
-  tools, and getting it wrong is worse than not doing it. See
-  [TOOLBOX.md](TOOLBOX.md).
+- **Rent ledger, arrears, receipts.** Above: it duplicates their payment portal and is
+  the easiest thing in the world to get subtly wrong.
+- **A certificate register.** Gas safety, EICR, EPC and alarm checks are not recorded
+  in their documents (see [TENANT-RECORDS.md](TENANT-RECORDS.md)), so there is nothing
+  to register. If they later want reminders for documents served, a simple per-tenancy
+  checklist is enough — not a certificate database.
 - **An applications pipeline** (viewing → referencing → offer). It is a different
   product, and it is where a small agency's process becomes bespoke.
 - **Multi-user accounts and permissions.** Still a single-user tool.
@@ -183,20 +215,29 @@ There are already packs in `data/`. They must not be lost or corrupted.
 | Migration merges or duplicates entities | Preview, confirm, and make it repeatable; never guess silently |
 | Over-modelling — more structure than prefilling needs | The test for every entity: *does it remove typing, or answer a question the agent asks?* If neither, it does not go in |
 | An inherited value is wrong and several tenancies inherit it | Show provenance on every prefilled field; ask before changing a shared value |
-| Their portfolio includes property outside England & Wales | The app must say so plainly rather than generate a plausible-looking agreement. The screenshot already shows the assistant catching a Swedish address — this should also be a deterministic check |
+| A non-UK address slips through | Already handled: a postcode that is not UK-shaped blocks generation. The client has confirmed they let only in England |
+| The app starts lecturing about law the agency does not track | Checks are graded: only what the *document* needs can block. Everything else is a quiet note |
 
 ---
 
-## Open questions
+## Settled
 
-1. **Is any of the portfolio outside England and Wales?** The screenshot shows
-   `Hisinga Backa, 422 41` beside a Birmingham postcode, which looks like a Swedish
-   address mixed into an English one. If they genuinely let abroad, the app must
-   refuse to produce an E&W agreement rather than warn.
-2. **Do they want the tenancy lifecycle managed** (upcoming → active → ending →
-   ended, with the end-of-tenancy pack), or only the paperwork at the start?
-3. **Certificates: per property or per room?** A gas certificate covers a whole
-   house; an EICR usually too. Per property is the recommendation, with the room
-   inheriting it.
+1. **England only.** The client has confirmed no Welsh, Scottish or overseas property.
+   The `england-only` rule and the postcode check stay as a guard against a mistyped
+   address, not as a compliance hurdle.
+2. **"Manage tenants" means the complete lifecycle** — upcoming, active, ending,
+   ended — with the end-of-tenancy paperwork, not just the move-in pack.
+3. **No certificate register**, because their documents do not record certificates.
+4. **Money: record, do not account** — as set out above.
+
+---
+
+## Still to decide
+
+1. **What does "ended" require?** A check-out inventory, a deposit deduction schedule,
+   a final statement — and whether those reuse the uploaded documents or need new ones.
+2. **Should the dashboard show money at all?** A count of "deposits still unprotected"
+   is a record. "Rent overdue" is accounting. The line is worth agreeing before M1.
+
 4. **Should the register hold money at all** — deposits received and returned — or
    only the deposit scheme details needed for the prescribed information?

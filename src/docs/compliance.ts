@@ -174,7 +174,7 @@ export function runComplianceChecks(
   if (deposit !== null && cap !== null && deposit > cap + 1) {
     add({
       id: 'deposit-over-cap',
-      severity: 'error',
+      severity: 'warning',
       title: 'Deposit is above the legal cap',
       detail: `The deposit of ${money(deposit)} is more than the maximum of ${money(cap)}. The cap is five weeks’ rent, or six weeks where the annual rent is £50,000 or more. Reduce the deposit, or treat the excess as a permitted payment.`,
       fields: ['tenancy.deposit_amount'],
@@ -187,7 +187,7 @@ export function runComplianceChecks(
   if (holding !== null && weekly !== null && holding > weekly + 1) {
     add({
       id: 'holding-over-cap',
-      severity: 'error',
+      severity: 'warning',
       title: 'Holding deposit is above one week’s rent',
       detail: `Holdings are capped at one week’s rent (${money(weekly)}). You have entered ${money(holding)}.`,
       fields: ['tenancy.holding_deposit_amount'],
@@ -201,7 +201,7 @@ export function runComplianceChecks(
   if (inAdvance !== null && rent !== null && period.startsWith('month') && inAdvance > rent + 1) {
     add({
       id: 'advance-over-cap',
-      severity: 'error',
+      severity: 'warning',
       title: 'Too much rent taken in advance',
       detail: `No more than one month’s rent may be taken in advance. You have entered ${money(inAdvance)} against a monthly rent of ${money(rent)}.`,
       fields: ['tenancy.rent_in_advance'],
@@ -267,7 +267,7 @@ export function runComplianceChecks(
     if (gasDate === null) {
       add({
         id: 'gas-safety-missing',
-        severity: 'error',
+        severity: 'info',
         title: 'No gas safety certificate recorded',
         detail: 'A gas safety check must be done before the tenant moves in, and the record given to them.',
         fields: ['safety.gas_safety_date'],
@@ -277,7 +277,7 @@ export function runComplianceChecks(
       if (addYears(gasDate, 1) < start) {
         add({
           id: 'gas-safety-expired',
-          severity: 'error',
+          severity: 'info',
           title: 'Gas safety certificate will be out of date',
           detail: `The recorded check (${toIso(gasDate)}) is more than 12 months before the tenancy starts. Get a new check.`,
           fields: ['safety.gas_safety_date'],
@@ -286,7 +286,7 @@ export function runComplianceChecks(
       } else if (gasDate > start) {
         add({
           id: 'gas-safety-after-start',
-          severity: 'warning',
+          severity: 'info',
           title: 'Gas safety check is dated after the tenancy starts',
           detail: 'The tenant must have the certificate before they move in. Check the dates.',
           fields: ['safety.gas_safety_date'],
@@ -306,7 +306,7 @@ export function runComplianceChecks(
   if (eicr === null) {
     add({
       id: 'eicr-missing',
-      severity: 'warning',
+      severity: 'info',
       title: 'No EICR recorded',
       detail: 'An electrical installation condition report is required at least every five years.',
       fields: ['safety.eicr_date'],
@@ -317,7 +317,7 @@ export function runComplianceChecks(
     if (expiry < today) {
       add({
         id: 'eicr-expired',
-        severity: 'error',
+        severity: 'info',
         title: 'EICR has expired',
         detail: `The report dated ${toIso(eicr)} is more than five years old. Get a new inspection.`,
         fields: ['safety.eicr_date'],
@@ -352,7 +352,7 @@ export function runComplianceChecks(
   if (epc === '') {
     add({
       id: 'epc-missing',
-      severity: 'error',
+      severity: 'info',
       title: 'No EPC rating recorded',
       detail: 'A valid EPC is required, and a copy must be given to the tenant before they move in.',
       fields: ['property.epc_rating'],
@@ -361,7 +361,7 @@ export function runComplianceChecks(
   } else if (epc === 'F' || epc === 'G') {
     add({
       id: 'epc-below-e',
-      severity: 'error',
+      severity: 'warning',
       title: `EPC band ${epc} cannot be let`,
       detail: 'Properties rated F or G may not be let unless a valid exemption is registered.',
       fields: ['property.epc_rating'],
@@ -372,7 +372,7 @@ export function runComplianceChecks(
   if (!hasValue(fields['safety.right_to_rent_check_date'])) {
     add({
       id: 'right-to-rent-missing',
-      severity: 'warning',
+      severity: 'info',
       title: 'Right to rent check not recorded',
       detail: 'Check every adult tenant’s right to rent before the tenancy starts and keep the evidence.',
       fields: ['safety.right_to_rent_check_date'],
@@ -383,7 +383,7 @@ export function runComplianceChecks(
   if (!hasValue(fields['safety.how_to_rent_date'])) {
     add({
       id: 'how-to-rent-missing',
-      severity: 'warning',
+      severity: 'info',
       title: 'How to Rent guide not recorded as given',
       detail: 'Give the tenant the current How to Rent guide at the start of the tenancy.',
       fields: ['safety.how_to_rent_date'],
@@ -394,7 +394,7 @@ export function runComplianceChecks(
   if (!hasValue(fields['safety.smoke_alarms'])) {
     add({
       id: 'alarms-missing',
-      severity: 'warning',
+      severity: 'info',
       title: 'Alarm test not recorded',
       detail: 'Smoke alarms on every storey and carbon monoxide alarms where needed must be tested on the day the tenancy starts.',
       fields: ['safety.smoke_alarms'],

@@ -61,12 +61,14 @@ describe('compliance checks', () => {
     assert.equal(report.ok, true);
   });
 
-  it('flags a deposit above the cap', () => {
+  it('flags a deposit above the cap without refusing to work', () => {
     const fields = completeFields();
     fields['tenancy.deposit_amount'] = 2500;
     const report = runComplianceChecks(fields, { today: TODAY });
-    assert.ok(ids(report).includes('deposit-over-cap'));
-    assert.equal(report.ok, false);
+    const finding = report.findings.find((item) => item.id === 'deposit-over-cap');
+    assert.ok(finding);
+    assert.equal(finding?.severity, 'warning', 'a cap breach advises; it must not block their paperwork');
+    assert.equal(report.ok, true);
   });
 
   it('flags a holding deposit above one week’s rent', () => {
@@ -116,12 +118,14 @@ describe('compliance checks', () => {
     assert.ok(ids(runComplianceChecks(fields, { today: TODAY })).includes('eicr-expired'));
   });
 
-  it('refuses an F or G rated property', () => {
+  it('flags an F or G rated property without blocking the paperwork', () => {
     const fields = completeFields();
     fields['property.epc_rating'] = 'F';
     const report = runComplianceChecks(fields, { today: TODAY });
-    assert.ok(ids(report).includes('epc-below-e'));
-    assert.equal(report.ok, false);
+    const finding = report.findings.find((item) => item.id === 'epc-below-e');
+    assert.ok(finding);
+    assert.equal(finding?.severity, 'warning');
+    assert.equal(report.ok, true);
   });
 
   it('warns when the tenant notice period is not two months', () => {

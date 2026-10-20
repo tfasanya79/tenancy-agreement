@@ -8,6 +8,37 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed — the app follows the client's process, not a compliance checklist
+
+The client's steer: their paperwork defines what the app asks for, and it is not our
+job to push them towards anything they do not already do.
+
+Reading their three documents properly corrected an assumption. The contracts *do*
+mention gas safety, EICR, EPC, right to rent, the How to Rent guide and alarms — but
+only as obligations and references ("the Gas Safety Inspection Report … may be served
+on you"), never as values recorded. So a proposed "compliance records" section would
+have asked for data their process never captures. It is dropped.
+
+`docs/TENANT-RECORDS.md` is the evidence: every value each document actually records
+(fifteen in a tenancy agreement, eleven in the holding deposit form), and the explicit
+list of what they do not record, so the app stops asking.
+
+Check severities changed to match. Only what a *document* needs can block generation:
+
+| Severity | Before | Now |
+| --- | --- | --- |
+| Error (blocks) | 12 findings, including gas safety, EICR, EPC, right to rent, How to Rent, alarms, and three statutory caps | Three kinds — a missing essential detail, a postcode that is not UK-shaped, a deposit protection deadline already passed |
+| Warning | 8 | 9, including the caps now that they advise rather than refuse |
+| Note | 5 | 13, including all of the above compliance topics |
+
+### Added — `docs/TENANT-RECORDS.md`, `docs/BACKOFFICE.md`
+
+The authoritative field list, and the back-office design. The certificate register is
+dropped: their documents do not record certificates, so there is nothing to register.
+Money is recorded, not accounted for: rent, deposit, scheme and dates, but no ledger,
+arrears or receipts — their contract already says payments go through their own
+portal.
+
 ### Added — repairing an agency's own contracts (`scripts/repair-contracts.ts`)
 
 `pnpm repair:contracts` produces corrected copies of an agency's own documents

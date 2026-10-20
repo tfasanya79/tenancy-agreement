@@ -510,7 +510,8 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | [docs/API.md](docs/API.md) | Developers — the HTTP API |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Running it on a server, and backing it up |
 | [docs/ROADMAP.md](docs/ROADMAP.md) | What is being built next, in what order, and how we will know it is done |
-| [docs/BACKOFFICE.md](docs/BACKOFFICE.md) | Design for the back office: landlords, properties, rooms, tenants, and prefilled forms |
+| [docs/BACKOFFICE.md](docs/BACKOFFICE.md) | Design for the back office: landlords, properties, rooms, tenants, prefilled forms |
+| [docs/TENANT-RECORDS.md](docs/TENANT-RECORDS.md) | Exactly what the client's documents record — the authoritative field list |
 | [SECURITY.md](SECURITY.md) | Data handling and hardening |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Changing templates, rules or code |
 

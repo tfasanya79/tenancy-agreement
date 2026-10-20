@@ -28,12 +28,10 @@ right**, and **never lose the agency's formatting**.
 *The foundation the rest of this list stands on. Design: [BACKOFFICE.md](BACKOFFICE.md).*
 
 Today a pack is an island, so the property address, landlord, room and rent are
-retyped for every tenant — and there is nowhere to ask "which certificates expire
-this month?". The back office fixes both, and it is a prerequisite for M4 (bulk
+retyped for every tenant — and there is nowhere to ask "which tenancies are at this number, and what is due next?". The back office fixes both, and it is a prerequisite for M4 (bulk
 rooms need rooms to exist) and for the prefilling that makes the form short.
 
-**What it holds:** agency settings, landlords, properties, rooms, certificates,
-tenants, and the tenancy as the link between them. The current pack becomes a
+**What it holds:** agency settings, landlords, properties, rooms, tenants, and the tenancy as the link between them. Not certificates — their documents do not record them (see [TENANT-RECORDS.md](TENANT-RECORDS.md)). The current pack becomes a
 tenancy, and gains links instead of losing anything.
 
 **What it buys:** in an already-set-up room, a new tenancy needs **three typed
@@ -44,14 +42,16 @@ derived.
 "not building" list in [BACKOFFICE.md](BACKOFFICE.md#what-i-would-deliberately-not-build).
 
 - [ ] Settings screen for the agency's own details, so they stop editing `.env` by hand.
-- [ ] Landlord, Property, Room, Tenant and Certificate records in SQLite, with a
+- [ ] Landlord, Property, Room and Tenant records in SQLite, with a
       migration that derives them from the packs that already exist — previewed and
       confirmed, never silently merged.
 - [ ] The tenancy form prefilled by inheritance, with provenance shown on every
       inherited field ("from Room 2"), and an explicit way to override.
 - [ ] Editing a shared value asks before it changes existing tenancies.
-- [ ] A deterministic check that the property is in England or Wales. The assistant
-      already spotted a Swedish address; the code should catch it too.
+- [ ] The tenancy lifecycle: upcoming, active, ending, ended — "manage tenants" means
+      the whole life of a tenancy, not just the move-in pack.
+- [ ] Advisories that never block. Gas safety, EICR, EPC and alarm records are not in
+      their documents, so they are quiet notes, never requirements.
 
 **Done when:** setting up a second tenant in a room that already exists takes three
 typed details, and no existing pack has lost a value.
@@ -109,7 +109,7 @@ reported at upload time. A demo pack renders from the documents in
 - [ ] Include the renewal dates that are not yet due (gas safety +12 months, EICR +5 years)
       so a year's diary fills in at once.
 - [ ] A **cross-pack view**: every tenancy, sorted by what is due. Deposits not yet
-      protected, written statements due, certificates expiring.
+      protected, written statements due, deposits to return.
 - [ ] Surface the same information on the pack list in the sidebar (a count of overdue items).
 
 **Done when:** opening the app answers "what do I have to do this week?" without clicking
@@ -206,7 +206,7 @@ fill themselves — and because M4 cannot be built without rooms. M7 second beca
 real tenant data is already in `data/` and should be recoverable before it matters.
 M2 third because the client has now supplied the documents and the repaired versions
 are ready to become their reference template. M3 follows naturally once tenancies,
-rooms and certificates are real records rather than isolated packs.
+rooms and tenancies are real records rather than isolated packs.
 
 ---
 
