@@ -238,10 +238,31 @@ export class Store {
     this.#db = new DatabaseSync(file);
     this.#db.exec('PRAGMA journal_mode = WAL;');
     this.#db.exec('PRAGMA foreign_keys = ON;');
+    // Keep the write-ahead log small and fold it into the database file as we go.
+    // In WAL mode a committed change can live only in `tenancydesk.db-wal` until a
+    // checkpoint moves it across; if that file is lost or removed — by a `cp`, a
+    // `VACUUM` from a shell, or a cleanup script — the change is lost with it. A
+    // 256-page limit means at most about a megabyte is ever exposed, and the
+    // periodic checkpoint in `src/server.ts` normally leaves far less than that.
+    this.#db.exec('PRAGMA wal_autocheckpoint = 256;');
     this.#db.exec(SCHEMA);
   }
 
+  /**
+   * Move committed changes out of the write-ahead log into the database file, so a
+   * copy of `tenancydesk.db` alone is a complete copy. Called on a timer and on
+   * shutdown.
+   */
+  checkpoint(): void {
+    try {
+      this.#db.exec('PRAGMA wal_checkpoint(TRUNCATE);');
+    } catch {
+      // A busy checkpoint is not an error worth stopping for: the next one succeeds.
+    }
+  }
+
   close(): void {
+    this.checkpoint();
     this.#db.close();
   }
 

@@ -621,6 +621,33 @@ docker compose start
 
 Or copy the volume straight to another machine with `rsync`, keeping the app stopped while it runs.
 
+### Looking inside the database safely
+
+The database runs in WAL (write-ahead log) mode: a committed change can live only in
+`tenancydesk.db-wal` until a checkpoint copies it into `tenancydesk.db`. That has a
+sharp edge, learned the hard way on a live installation:
+
+> **Never copy, tidy, `VACUUM` or clean up `data/` while the app is running.** A shell
+> command that opens the database read-write and closes it, a `cp tenancydesk.db`, or a
+> cleanup that removes stray `-wal` files can leave the running app writing into a file
+> that no longer exists on disk. The app carries on serving the data from that deleted
+> file and the `.db` on disk looks empty — and when the process restarts, the recent
+> work is gone.
+
+Inspect it read-only, which cannot checkpoint, truncate or delete anything:
+
+```bash
+sqlite3 'file:/home/you/tenancydesk/data/tenancydesk.db?mode=ro' 'SELECT COUNT(*) FROM packs;'
+```
+
+The app also defends itself now: it keeps the log small (`wal_autocheckpoint`), folds it
+into the database every five minutes, and checkpoints on shutdown — so a lost log costs
+minutes rather than a day. Backups run **hourly** for the same reason, and the backup
+script prints what it captured (`1 packs, 1 users, 54 events`) so a silently empty
+snapshot is visible rather than discovered later.
+
+If it does happen: a deleted-but-open database file can still be recovered from
+`/proc/<pid>/fd/` while the process lives, before anything is restarted.
 ### The WAL caveat
 
 The database runs in SQLite's WAL (write-ahead log) mode. New data can sit in `tenancydesk.db-wal` for a moment before it is folded into `tenancydesk.db`. That means:

@@ -276,6 +276,13 @@ function renderSignInScreen() {
       state.me = result.user;
       await loadWorkspace();
     },
+    // There is no sign-up: an account is something a person is given, not something
+    // they create. Saying so here saves the hunt for a button that does not exist.
+    footer: el(
+      'p',
+      { class: 'small' },
+      'There is no sign-up on this page. An account is created for you by your agency’s owner, in Back office → People & access — ask them if you have not been given a login, or if your password has stopped working.',
+    ),
   });
 }
 

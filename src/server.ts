@@ -77,9 +77,24 @@ if (registry.warnings.length > 0) {
 console.log('  Press Ctrl+C to stop.');
 console.log('');
 
+/**
+ * Fold the write-ahead log into the database every few minutes.
+ *
+ * Without this, a long-running app keeps weeks of committed changes in
+ * `tenancydesk.db-wal` and the `.db` file looks empty to anything else — a backup,
+ * a `sqlite3` query, or a person who copies the file. It also means the loss of
+ * that one file loses everything since the process started. Five minutes is a
+ * cheap ceiling.
+ */
+const checkpointTimer = setInterval(() => {
+  store.checkpoint();
+}, 5 * 60 * 1000);
+checkpointTimer.unref();
+
 for (const signal of ['SIGINT', 'SIGTERM'] as const) {
   process.on(signal, () => {
     console.log('\n  Stopping TenancyDesk...');
+    clearInterval(checkpointTimer);
     void app.close().then(() => {
       store.close();
       process.exit(0);

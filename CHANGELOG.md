@@ -19,6 +19,36 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Fixed — a lost write-ahead log, and the recovery
+
+A live installation lost a day's work without anything appearing to fail. The cause:
+in WAL mode a committed change lives in `tenancydesk.db-wal` until a checkpoint folds it
+into `tenancydesk.db`, and that log was removed from under the running process — the
+kind of thing a shell `sqlite3` call, a `cp`, a `VACUUM` or a tidy-up script does without
+meaning to. The app kept serving from the deleted file, so everything looked normal: the
+account and the pack were visible in the browser while the `.db` on disk held neither,
+and a restart would have ended them.
+
+Recovered by copying the still-open log out of `/proc/<pid>/fd/` before restarting,
+checkpointing it into a copy, verifying `PRAGMA integrity_check`, and installing that.
+The surviving data: one owner account, one tenancy, 54 audit events and an upload.
+
+Four changes so it cannot bite twice:
+
+- **`wal_autocheckpoint = 256`** — the log is folded into the database as it grows, so it
+  never holds more than about a megabyte of committed work.
+- **A checkpoint every five minutes**, and on shutdown, so `.db` is a complete copy of the
+  database for anyone who opens it with a backup tool or `sqlite3`.
+- **Backups run hourly** instead of nightly, named to the hour, kept 14 days — and the
+  script now prints what it captured (`1 packs, 1 users, 54 events`), so an empty snapshot
+  is noticed at the time rather than when it is needed.
+- **`docs/DEPLOY.md` says how to open the database safely**: read-only
+  (`file:…?mode=ro`), never `VACUUM`, `cp` or clean up `data/` under a running app, and how
+  to recover a deleted-but-open file from `/proc`.
+
+Also: the sign-in screen now says that there is no sign-up — an account is created by the
+agency's owner — because somebody reasonably went looking for a button that does not
+exist.
 ### Added — a platform design, deliberately not built
 
 `docs/PLATFORM.md` sets out how this becomes a platform many agencies share, on the
