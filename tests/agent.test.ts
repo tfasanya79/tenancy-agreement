@@ -59,7 +59,20 @@ async function runtime() {
   const registry = await TemplateRegistry.load(templatesDir);
   const store = new Store(tempDir('td-agent-data-'));
   const pack = store.createPack({});
-  return { registry, store, pack, runtime: { store, registry, packId: pack.id, fallbackFields: {} } };
+  return {
+    registry,
+    store,
+    pack,
+    runtime: {
+      store,
+      registry,
+      packId: pack.id,
+      fallbackFields: {},
+      // These unit tests exercise the tools without back-office inheritance.
+      effective: (packId: string) => store.getPack(packId).fields,
+      provenance: () => ({}) as Record<string, string>,
+    },
+  };
 }
 
 /* ------------------------------------------------------------------ tests --- */

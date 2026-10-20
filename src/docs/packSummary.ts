@@ -5,7 +5,7 @@
 
 import type { AppConfig } from '../config.ts';
 import { assessPack, type TemplateRegistry } from './registry.ts';
-import type { Pack, Store } from '../db.ts';
+import { propertyAddressFrom, tenantNameFrom, type Pack, type Store } from '../db.ts';
 import { labelFor } from './fields.ts';
 import { RULES_REVIEWED_ON } from '../knowledge/rules.ts';
 
@@ -15,6 +15,7 @@ export type PackSummaryView = {
   tenantName: string;
   propertyAddress: string;
   status: Pack['status'];
+  lifecycle: Pack['lifecycle'];
   documentCount: number;
   errorCount: number;
   warningCount: number;
@@ -23,15 +24,18 @@ export type PackSummaryView = {
   updatedAt: string;
 };
 
-export function packSummaryView(pack: Pack, store: Store): PackSummaryView {
+export function packSummaryView(pack: Pack, store: Store, fields?: Record<string, unknown>): PackSummaryView {
   const documents = store.listDocuments(pack.id);
-  const readiness = assessPack(pack.fields);
+  const effective = fields ?? pack.fields;
+  const readiness = assessPack(effective);
   return {
     id: pack.id,
     reference: pack.reference,
-    tenantName: pack.tenantName,
-    propertyAddress: pack.propertyAddress,
+    // Names come from the merged view, so an inherited address still labels the pack.
+    tenantName: tenantNameFrom(effective) || pack.tenantName,
+    propertyAddress: propertyAddressFrom(effective) || pack.propertyAddress,
     status: pack.status,
+    lifecycle: pack.lifecycle,
     documentCount: documents.length,
     errorCount: readiness.compliance.counts.error,
     warningCount: readiness.compliance.counts.warning,
@@ -53,9 +57,11 @@ export function buildPackSummaryText(
   store: Store,
   registry: TemplateRegistry,
   config: AppConfig,
+  fields?: Record<string, unknown>,
 ): string {
   const documents = store.listDocuments(pack.id);
-  const readiness = assessPack(pack.fields);
+  const effective = fields ?? pack.fields;
+  const readiness = assessPack(effective);
   const lines: string[] = [];
 
   lines.push('TENANCYDESK — DOCUMENT PACK');
@@ -101,7 +107,7 @@ export function buildPackSummaryText(
   }
   lines.push('');
 
-  const missing = registry.list(pack.fields).flatMap((doc) => doc.missing);
+  const missing = registry.list(effective).flatMap((doc) => doc.missing);
   const uniqueMissing = [...new Set(missing)];
   if (uniqueMissing.length > 0) {
     lines.push('FIELDS LEFT BLANK');

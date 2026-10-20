@@ -446,3 +446,37 @@ suggested — only `tenancy`, `deposit`, `inventory`, `compliance`, `welcome` an
 and controls per-template `missing`. Placeholders not in `FIELDS` (and not `today`)
 produce a warning at startup and on `/api/health`; restart to pick up the file, as
 the registry is loaded once in `src/server.ts`.
+
+---
+
+## Back office
+
+The records a tenancy inherits from. All of these are plain JSON; errors come back as
+`{ "error": "message" }`.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/api/settings` | The agency's own details |
+| `PUT` | `/api/settings` | Save them (`name`, `address`, `phone`, `email`, `clientMoneyScheme`, `redressScheme`, `negotiator`, `rentAccount`) |
+| `GET` | `/api/backoffice` | Everything the back-office screen needs: settings, stats, landlords with property counts, properties with their rooms, tenants with tenancy counts, and any packs not yet linked |
+| `POST` | `/api/backoffice/landlords` · `/properties` · `/rooms` · `/tenants` | Create a record |
+| `PATCH` | `/api/backoffice/{type}/:id` | Update a record |
+| `DELETE` | `/api/backoffice/{type}/:id` | Delete it. Returns `409` with the tenancies that still use it unless `?force=1` |
+| `POST` | `/api/backoffice/migrate/preview` | What a tidy-up would create. **Writes nothing** |
+| `POST` | `/api/backoffice/migrate/apply` | Writes it. Requires `{ "confirm": true }`; without it, returns the plan |
+
+### How a tenancy is prefilled
+
+`GET /api/packs/:id` returns, alongside the pack:
+
+| Field | Meaning |
+| --- | --- |
+| `fields` | The **merged** details — the pack's own values over its room, property, landlord and the agency settings. This is what documents are built from |
+| `provenance` | For each key, where it came from: `tenancy`, `room`, `property`, `landlord`, `agency` or `derived` |
+| `overrides` | The keys this tenancy sets itself |
+| `links` | The landlord, property, room and tenant records it points at |
+
+`PATCH /api/packs/:id` accepts `landlordId`, `propertyId`, `roomId`, `tenantId` and
+`lifecycle` (`upcoming`, `active`, `ending`, `ended`) as well as `fields` and `status`.
+Sending only the fields the user actually typed leaves everything else inherited — an
+empty string means "go back to the inherited value".

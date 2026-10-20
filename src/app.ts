@@ -11,7 +11,8 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import type { AppConfig } from './config.ts';
-import { Store, type Pack, type PackStatus } from './db.ts';
+import { Store, type Lifecycle, type Pack, type PackLinks, type PackStatus } from './db.ts';
+import { LIFECYCLES } from './backoffice/entities.ts';
 import { ENV_DEFAULTS, FIELDS, GROUPS, CORE_FIELDS } from './docs/fields.ts';
 import { mergeFields } from './docs/fields.ts';
 import { runComplianceChecks } from './docs/compliance.ts';
@@ -23,6 +24,9 @@ import { runAgent, type AgentEvent } from './agent/loop.ts';
 import { EXAMPLE_PROMPTS } from './agent/prompts.ts';
 import { createZip } from './util/zip.ts';
 import { buildPackSummaryText, packSummaryView } from './docs/packSummary.ts';
+import { BackOffice } from './backoffice/entities.ts';
+import { contextFor, effectiveFields } from './backoffice/context.ts';
+import { applyMigration, previewMigration } from './backoffice/migrate.ts';
 
 export type AppDeps = {
   config: AppConfig;
@@ -84,17 +88,61 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       baseUrl: config.deepseekBaseUrl,
     });
 
-  const agency = agencyFallback(config);
+  // The back office shares the same SQLite file and connection as the packs.
+  const backOffice = new BackOffice(store.handle);
+
+  /**
+   * Agency details for a pack: settings saved in the app win, then `.env`.
+   * Read on every request so a change in Settings takes effect immediately.
+   */
+  const currentAgency = (): Record<string, unknown> => {
+    const saved = backOffice.getSettings();
+    const fromSettings: Record<string, unknown> = {};
+    const mapping: Array<[string, string]> = [
+      ['agent.company_name', saved.name],
+      ['agent.email', saved.email],
+      ['agent.phone', saved.phone],
+      ['agent.address', saved.address],
+      ['agent.client_money_scheme', saved.clientMoneyScheme],
+      ['agent.redress_scheme', saved.redressScheme],
+      ['agent.name', saved.negotiator],
+    ];
+    for (const [key, value] of mapping) {
+      if (value.trim() !== '') fromSettings[key] = value;
+    }
+    return { ...agencyFallback(config), ...fromSettings };
+  };
+
   const assistantAvailable = !config.offlineMode && client.configured;
 
-  /** Everything the interface needs for one pack, in one response. */
-  const packDetail = (pack: Pack) => ({
-    pack,
-    readiness: assessPack(pack.fields),
-    documents: store.listDocuments(pack.id),
-    templates: registry.list(pack.fields),
-    suggested: registry.suggestSelection(pack.fields),
+  /** The merged details for a pack: its own values over what it inherits. */
+  const effectiveFor = (pack: Pack): Record<string, unknown> => ({
+    ...currentAgency(),
+    ...effectiveFields(pack, backOffice),
   });
+
+  /** Everything the interface needs for one pack, in one response. */
+  const packDetail = (pack: Pack) => {
+    const context = contextFor(pack, backOffice);
+    const fields = { ...currentAgency(), ...context.resolved.values };
+    const readiness = assessPack(fields);
+    return {
+      pack,
+      fields,
+      provenance: context.resolved.provenance,
+      overrides: context.resolved.overrides,
+      readiness: { ...readiness, ready: context.resolved.missing.length === 0, missingCore: context.resolved.missing },
+      documents: store.listDocuments(pack.id),
+      templates: registry.list(fields),
+      suggested: registry.suggestSelection(fields),
+      links: {
+        landlord: pack.landlordId === null ? null : backOffice.getLandlord(pack.landlordId),
+        property: pack.propertyId === null ? null : backOffice.getProperty(pack.propertyId),
+        room: pack.roomId === null ? null : backOffice.getRoom(pack.roomId),
+        tenant: pack.tenantId === null ? null : backOffice.getTenant(pack.tenantId),
+      },
+    };
+  };
 
   await app.register(fastifyStatic, {
     root: resolve(config.publicDir),
@@ -129,6 +177,8 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       clientMoneyScheme: config.agency.clientMoneyScheme,
       redressScheme: config.agency.redressScheme,
     },
+    settings: backOffice.getSettings(),
+    backOffice: backOffice.stats(),
     assistantAvailable,
     model: config.deepseekModel,
     offlineMode: config.offlineMode,
@@ -156,10 +206,132 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return { rules: searchRules(query), reviewedOn: RULES_REVIEWED_ON };
   });
 
+  // --- back office --------------------------------------------------------
+
+  app.get('/api/settings', async () => backOffice.getSettings());
+
+  app.put('/api/settings', async (request) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const pick = (key: string): string | undefined =>
+      typeof body[key] === 'string' ? (body[key] as string).trim() : undefined;
+
+    return backOffice.saveSettings({
+      ...(pick('name') === undefined ? {} : { name: pick('name') as string }),
+      ...(pick('address') === undefined ? {} : { address: pick('address') as string }),
+      ...(pick('phone') === undefined ? {} : { phone: pick('phone') as string }),
+      ...(pick('email') === undefined ? {} : { email: pick('email') as string }),
+      ...(pick('clientMoneyScheme') === undefined ? {} : { clientMoneyScheme: pick('clientMoneyScheme') as string }),
+      ...(pick('redressScheme') === undefined ? {} : { redressScheme: pick('redressScheme') as string }),
+      ...(pick('negotiator') === undefined ? {} : { negotiator: pick('negotiator') as string }),
+      ...(pick('rentAccount') === undefined ? {} : { rentAccount: pick('rentAccount') as string }),
+    });
+  });
+
+  /** Everything the back-office screens need, in one response. */
+  app.get('/api/backoffice', async () => {
+    const properties = backOffice.listProperties();
+    const rooms = backOffice.roomSummary();
+    const tenancies = store.listPacks();
+
+    return {
+      settings: backOffice.getSettings(),
+      stats: backOffice.stats(),
+      landlords: backOffice.listLandlords().map((landlord) => ({
+        ...landlord,
+        propertyCount: properties.filter((property) => property.landlordId === landlord.id).length,
+      })),
+      properties: properties.map((property) => ({
+        ...property,
+        landlord: property.landlordId === null ? null : backOffice.getLandlord(property.landlordId),
+        rooms: rooms.filter((room) => room.propertyId === property.id),
+      })),
+      tenants: backOffice.listTenants().map((tenant) => ({
+        ...tenant,
+        tenancyCount: tenancies.filter((pack) => pack.tenantId === tenant.id).length,
+      })),
+      unlinked: tenancies
+        .filter((pack) => pack.propertyId === null)
+        .map((pack) => ({ id: pack.id, reference: pack.reference, tenantName: pack.tenantName })),
+    };
+  });
+
+  /** Create or update a back-office record. */
+  const recordRoutes = (kind: 'landlords' | 'properties' | 'rooms' | 'tenants') => {
+    app.post(`/api/backoffice/${kind}`, async (request, reply) => {
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      try {
+        const created =
+          kind === 'landlords'
+            ? backOffice.createLandlord(body)
+            : kind === 'properties'
+              ? backOffice.createProperty(body)
+              : kind === 'rooms'
+                ? backOffice.createRoom(body as { propertyId: string })
+                : backOffice.createTenant(body);
+        return reply.code(201).send(created);
+      } catch (error) {
+        return badRequest(reply, error instanceof Error ? error.message : String(error));
+      }
+    });
+
+    app.patch(`/api/backoffice/${kind}/:id`, async (request, reply) => {
+      const id = (request.params as Record<string, string>)['id'] ?? '';
+      const body = (request.body ?? {}) as Record<string, unknown>;
+      try {
+        const updated =
+          kind === 'landlords'
+            ? backOffice.updateLandlord(id, body)
+            : kind === 'properties'
+              ? backOffice.updateProperty(id, body)
+              : kind === 'rooms'
+                ? backOffice.updateRoom(id, body)
+                : backOffice.updateTenant(id, body);
+        return updated;
+      } catch (error) {
+        return notFound(reply, error instanceof Error ? error.message : String(error));
+      }
+    });
+
+    app.delete(`/api/backoffice/${kind}/:id`, async (request, reply) => {
+      const id = (request.params as Record<string, string>)['id'] ?? '';
+      const column = kind === 'landlords' ? 'landlord_id' : kind === 'properties' ? 'property_id' : kind === 'rooms' ? 'room_id' : 'tenant_id';
+      const inUse = store.tenanciesUsing(column, id);
+      if (inUse.length > 0 && (request.query as Record<string, unknown>)['force'] !== '1') {
+        return reply.code(409).send({
+          error: `${inUse.length} tenancy${inUse.length === 1 ? '' : 'ies'} still use this. They will keep their own details but stop inheriting.`,
+          tenancies: inUse.map((pack) => ({ id: pack.id, reference: pack.reference })),
+        });
+      }
+      if (kind === 'landlords') backOffice.deleteLandlord(id);
+      else if (kind === 'properties') backOffice.deleteProperty(id);
+      else if (kind === 'rooms') backOffice.deleteRoom(id);
+      else backOffice.deleteTenant(id);
+      return reply.code(204).send();
+    });
+  };
+
+  recordRoutes('landlords');
+  recordRoutes('properties');
+  recordRoutes('rooms');
+  recordRoutes('tenants');
+
+  /** What the migration would create, without writing anything. */
+  app.post('/api/backoffice/migrate/preview', async () => previewMigration(store.listPacks()));
+
+  /** Write it. The client confirms first. */
+  app.post('/api/backoffice/migrate/apply', async (request) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const plan = previewMigration(store.listPacks());
+    if (body['confirm'] !== true) {
+      return { applied: false, plan };
+    }
+    return { applied: true, result: applyMigration(plan, backOffice, store), plan };
+  });
+
   // --- packs --------------------------------------------------------------
 
   app.get('/api/packs', async () => ({
-    packs: store.listPacks().map((pack) => packSummaryView(pack, store)),
+    packs: store.listPacks().map((pack) => packSummaryView(pack, store, effectiveFor(pack))),
   }));
 
   app.post('/api/packs', async (request, reply) => {
@@ -168,7 +340,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ? (body['fields'] as Record<string, unknown>)
       : {};
 
-    const seeded: Record<string, unknown> = { ...agency, ...mergeFields({}, rawFields).merged };
+    // Do not copy the agency's details into the pack: they are inherited from
+    // Settings, so changing them later must not leave stale copies behind.
+    const seeded: Record<string, unknown> = mergeFields({}, rawFields).merged;
     const pack = store.createPack(seeded);
     return reply.code(201).send(packDetail(pack));
   });
@@ -200,7 +374,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     }
 
     const updated = store.updatePack(pack.id, { fields, status });
-    return packDetail(updated);
+
+    // Lifecycle and links to the back-office records.
+    const links: Partial<PackLinks> = {};
+    const requestedLifecycle = body['lifecycle'];
+    if (typeof requestedLifecycle === 'string' && (LIFECYCLES as readonly string[]).includes(requestedLifecycle)) {
+      links.lifecycle = requestedLifecycle as Lifecycle;
+    }
+    for (const [key, column] of [
+      ['landlordId', 'landlordId'],
+      ['propertyId', 'propertyId'],
+      ['roomId', 'roomId'],
+      ['tenantId', 'tenantId'],
+    ] as const) {
+      const value = body[key];
+      if (value === null) links[column] = null;
+      else if (typeof value === 'string' && value !== '') links[column] = value;
+    }
+
+    const linked = Object.keys(links).length > 0 ? store.linkPack(updated.id, links) : updated;
+    return packDetail(linked);
   });
 
   app.delete('/api/packs/:id', async (request, reply) => {
@@ -234,7 +427,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.post('/api/packs/:id/checks', async (request, reply) => {
     const pack = store.findPack(paramId(request));
     if (pack === null) return notFound(reply, 'That pack no longer exists.');
-    return runComplianceChecks(pack.fields);
+    return runComplianceChecks(effectiveFor(pack));
   });
 
   // --- documents ----------------------------------------------------------
@@ -248,12 +441,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (templateId === '' || !registry.has(templateId)) return badRequest(reply, 'Unknown document.');
 
     const template = registry.get(templateId);
-    const rendered = renderTemplate(template, { fields: pack.fields, fallbackFields: agency });
+    const rendered = renderTemplate(template, { fields: effectiveFor(pack), fallbackFields: currentAgency() });
     const { renderHtml } = await import('./docs/toHtml.ts');
     const html = renderHtml(rendered.blocks, {
       title: template.title,
       subtitle: `Reference ${pack.reference}`,
-      footerText: config.agency.name,
+      footerText: String(currentAgency()['agent.company_name'] ?? ''),
       embedded: true,
     });
 
@@ -277,9 +470,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       store,
       registry,
       packId: pack.id,
-      fields: pack.fields,
+      fields: effectiveFor(pack),
       ...(templateIds === undefined ? {} : { templateIds }),
-      fallbackFields: agency,
+      fallbackFields: currentAgency(),
     });
 
     return { documents: generated, pack: packDetail(store.getPack(pack.id)) };
@@ -339,7 +532,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (documents.length === 0) return badRequest(reply, 'Generate some documents first, then download them together.');
 
     const entries: Array<{ name: string; data: Buffer | string }> = [
-      { name: '00 - Pack summary.txt', data: buildPackSummaryText(pack, store, registry, config) },
+      { name: '00 - Pack summary.txt', data: buildPackSummaryText(pack, store, registry, config, effectiveFor(pack)) },
     ];
 
     for (const document of documents) {
@@ -415,7 +608,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
           store,
           registry,
           packId: pack.id,
-          fallbackFields: agency,
+          fallbackFields: currentAgency(),
+          effective: (packId: string) => effectiveFor(store.getPack(packId)),
+          provenance: (packId: string) => contextFor(store.getPack(packId), backOffice).resolved.provenance,
         },
         userMessage: message,
         onEvent: send,

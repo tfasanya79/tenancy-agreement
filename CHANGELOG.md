@@ -8,6 +8,42 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — the back office, and forms that fill themselves
+
+The client's two asks: manage tenancies in one place, and stop retyping what has not
+changed.
+
+New records in SQLite — **landlords, properties, rooms, tenants, and the agency's own
+details** — with a **Back office** screen for each. A tenancy keeps its own details and
+gains links to these records; nothing is moved, so nothing can be lost.
+
+`src/backoffice/inheritance.ts` merges a tenancy over what it inherits, in order:
+agency → landlord → property → room → the tenancy itself. The first value found wins,
+an empty value means "go back to inherited", and every prefilled field is labelled
+with where it came from ("from the room"). Only fields the agent actually types are
+saved, so a prefilled value is never frozen into the tenancy.
+
+**Typing three things — tenant name, tenant email, start date — now produces a full
+document set in an existing room.** `tests/backoffice.test.ts` asserts it end to end,
+including that the rendered agreement contains the inherited address and the room's
+rent.
+
+Also in this change:
+
+- `pnpm`-free migration: "Tidy up" finds the properties, rooms, landlords and tenants
+  already inside existing packs, **shows what it would create**, and links them only
+  on confirmation. A preview writes nothing; an already-linked pack is never migrated
+  twice; a pack with no address is reported rather than guessed at.
+- The agency's details are no longer copied into each pack, so changing them in
+  Settings takes effect everywhere instead of leaving stale copies behind.
+- Tenancy lifecycle (`upcoming` / `active` / `ending` / `ended`) on the pack record,
+  set from the start date during migration.
+- New routes: `/api/settings`, `/api/backoffice`, CRUD for each record type,
+  `/api/backoffice/migrate/preview` and `/apply`.
+
+209 tests. `pnpm docs:check` clean.
+
+
 ### Changed — the app follows the client's process, not a compliance checklist
 
 The client's steer: their paperwork defines what the app asks for, and it is not our

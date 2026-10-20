@@ -17,6 +17,18 @@ import { DatabaseSync } from 'node:sqlite';
 
 export type PackStatus = 'draft' | 'ready' | 'generated' | 'sent';
 
+/** Where a tenancy sits in its life. */
+export type Lifecycle = 'upcoming' | 'active' | 'ending' | 'ended';
+
+/** Pointers to the back-office records this tenancy inherits from. */
+export type PackLinks = {
+  landlordId: string | null;
+  propertyId: string | null;
+  roomId: string | null;
+  tenantId: string | null;
+  lifecycle: Lifecycle;
+};
+
 export type Note = { id: string; text: string; createdAt: string };
 
 export type CoverMessage = { email?: string; whatsapp?: string; createdAt: string };
@@ -30,6 +42,11 @@ export type Pack = {
   fields: Record<string, unknown>;
   notes: Note[];
   coverMessage: CoverMessage | null;
+  landlordId: string | null;
+  propertyId: string | null;
+  roomId: string | null;
+  tenantId: string | null;
+  lifecycle: Lifecycle;
   createdAt: string;
   updatedAt: string;
 };
@@ -68,6 +85,11 @@ type PackRow = {
   fields_json: string;
   notes_json: string;
   cover_message_json: string;
+  landlord_id: string | null;
+  property_id: string | null;
+  room_id: string | null;
+  tenant_id: string | null;
+  lifecycle: string;
   created_at: string;
   updated_at: string;
 };
@@ -107,6 +129,11 @@ CREATE TABLE IF NOT EXISTS packs (
   fields_json        TEXT NOT NULL DEFAULT '{}',
   notes_json         TEXT NOT NULL DEFAULT '[]',
   cover_message_json TEXT NOT NULL DEFAULT 'null',
+  landlord_id        TEXT,
+  property_id        TEXT,
+  room_id            TEXT,
+  tenant_id          TEXT,
+  lifecycle          TEXT NOT NULL DEFAULT 'upcoming',
   created_at         TEXT NOT NULL,
   updated_at         TEXT NOT NULL
 );
@@ -161,6 +188,11 @@ function mapPack(row: PackRow): Pack {
     fields: parseJson<Record<string, unknown>>(row.fields_json, {}),
     notes: parseJson<Note[]>(row.notes_json, []),
     coverMessage: parseJson<CoverMessage | null>(row.cover_message_json, null),
+    landlordId: row.landlord_id ?? null,
+    propertyId: row.property_id ?? null,
+    roomId: row.room_id ?? null,
+    tenantId: row.tenant_id ?? null,
+    lifecycle: (row.lifecycle as Lifecycle | undefined) ?? 'upcoming',
     createdAt: row.created_at,
     updatedAt: row.updated_at,
   };
@@ -211,6 +243,48 @@ export class Store {
 
   close(): void {
     this.#db.close();
+  }
+
+  /** The raw connection, for the back-office repository that shares this file. */
+  get handle(): DatabaseSync {
+    return this.#db;
+  }
+
+  /** Point a tenancy at the records it inherits from. */
+  linkPack(id: string, links: Partial<PackLinks>): Pack {
+    const pack = this.getPack(id);
+    const next = {
+      landlordId: links.landlordId === undefined ? pack.landlordId : links.landlordId,
+      propertyId: links.propertyId === undefined ? pack.propertyId : links.propertyId,
+      roomId: links.roomId === undefined ? pack.roomId : links.roomId,
+      tenantId: links.tenantId === undefined ? pack.tenantId : links.tenantId,
+      lifecycle: links.lifecycle === undefined ? pack.lifecycle : links.lifecycle,
+    };
+
+    this.#db
+      .prepare(
+        `UPDATE packs SET landlord_id = ?, property_id = ?, room_id = ?, tenant_id = ?, lifecycle = ?, updated_at = ?
+         WHERE id = ?`,
+      )
+      .run(
+        next.landlordId,
+        next.propertyId,
+        next.roomId,
+        next.tenantId,
+        next.lifecycle,
+        nowIso(),
+        id,
+      );
+
+    return this.getPack(id);
+  }
+
+  /** Tenancies that inherit from a given record — asked before a shared change. */
+  tenanciesUsing(column: 'landlord_id' | 'property_id' | 'room_id' | 'tenant_id', id: string): Pack[] {
+    const rows = this.#db
+      .prepare(`SELECT * FROM packs WHERE ${column} = ? ORDER BY updated_at DESC`)
+      .all(id) as unknown as PackRow[];
+    return rows.map(mapPack);
   }
 
   /** Where generated files for a pack live, relative to the data directory. */

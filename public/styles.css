@@ -552,6 +552,60 @@ textarea { min-height: 68px; resize: vertical; }
 .mt { margin-top: 1rem; }
 hr.sep { border: 0; border-top: 1px solid var(--line); margin: 1.1rem 0; }
 
+/* --- inherited values ----------------------------------------------------- */
+
+.prov {
+  display: inline-block;
+  margin-left: .4rem;
+  padding: .02rem .38rem;
+  border-radius: 4px;
+  font-size: .68rem;
+  font-weight: 600;
+  letter-spacing: .01em;
+  background: var(--sand-deep);
+  color: var(--muted);
+  vertical-align: middle;
+}
+.prov-room { background: #e8eef7; color: #35507c; }
+.prov-property { background: #eaf3ec; color: #2f6b45; }
+.prov-landlord { background: #f5ece1; color: #7a5c3e; }
+.prov-agency { background: #efe9f3; color: #5d4a70; }
+.prov-derived { background: #f3f1ea; color: #6b6459; }
+input.is-inherited, select.is-inherited, textarea.is-inherited {
+  color: var(--ink-soft);
+  background: repeating-linear-gradient(135deg, #fcfbf9, #fcfbf9 6px, #f7f5f0 6px, #f7f5f0 12px);
+}
+
+/* --- back office ---------------------------------------------------------- */
+
+.bo-grid { display: grid; gap: 1rem; }
+.bo-section {
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1rem 1.1rem;
+}
+.bo-section h3 { font-size: .95rem; margin-bottom: .2rem; }
+.bo-section > p.small { margin-bottom: .8rem; }
+.bo-row {
+  display: flex; align-items: center; justify-content: space-between; gap: .8rem;
+  padding: .55rem .1rem;
+  border-top: 1px solid var(--line);
+}
+.bo-row:first-of-type { border-top: 0; }
+.bo-row .bo-what { min-width: 0; }
+.bo-row .bo-what strong { font-size: .88rem; display: block; }
+.bo-row .bo-what span { font-size: .76rem; color: var(--muted); }
+.bo-row .bo-actions { display: flex; gap: .35rem; flex-wrap: wrap; }
+.bo-sub {
+  margin-top: .5rem; padding: .5rem .7rem;
+  background: var(--sand); border-radius: var(--radius-sm);
+  font-size: .82rem;
+}
+.bo-sub .bo-room { display: flex; justify-content: space-between; gap: .6rem; padding: .18rem 0; }
+.bo-links { display: flex; gap: .5rem; flex-wrap: wrap; margin-bottom: 1rem; }
+.bo-links .btn.is-active { background: var(--accent-soft); border-color: #cfe2db; color: var(--accent-dark); }
+
 /* --- responsive ----------------------------------------------------------- */
 
 @media (max-width: 880px) {

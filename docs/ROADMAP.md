@@ -41,16 +41,16 @@ derived.
 **Deliberately excluded:** rent ledger, arrears, applications pipeline — see the
 "not building" list in [BACKOFFICE.md](BACKOFFICE.md#what-i-would-deliberately-not-build).
 
-- [ ] Settings screen for the agency's own details, so they stop editing `.env` by hand.
-- [ ] Landlord, Property, Room and Tenant records in SQLite, with a
+- [x] Settings screen for the agency's own details, so they stop editing `.env` by hand.
+- [x] Landlord, Property, Room and Tenant records in SQLite, with a
       migration that derives them from the packs that already exist — previewed and
       confirmed, never silently merged.
-- [ ] The tenancy form prefilled by inheritance, with provenance shown on every
+- [x] The tenancy form prefilled by inheritance, with provenance shown on every
       inherited field ("from Room 2"), and an explicit way to override.
 - [ ] Editing a shared value asks before it changes existing tenancies.
-- [ ] The tenancy lifecycle: upcoming, active, ending, ended — "manage tenants" means
+- [ ] The tenancy lifecycle screens: upcoming, active, ending, ended — "manage tenants" means
       the whole life of a tenancy, not just the move-in pack.
-- [ ] Advisories that never block. Gas safety, EICR, EPC and alarm records are not in
+- [x] Advisories that never block. Gas safety, EICR, EPC and alarm records are not in
       their documents, so they are quiet notes, never requirements.
 
 **Done when:** setting up a second tenant in a room that already exists takes three

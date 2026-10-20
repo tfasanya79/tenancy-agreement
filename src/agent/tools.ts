@@ -22,8 +22,16 @@ export type ToolRuntime = {
   store: Store;
   registry: TemplateRegistry;
   packId: string;
-  /** Agency details from .env, used when the pack has none. */
+  /** Agency details, used when the pack has none. */
   fallbackFields: Record<string, unknown>;
+  /**
+   * The tenancy's details merged over what it inherits from its room, property,
+   * landlord and the agency. Checks and documents must use these, not the sparse
+   * fields stored on the pack.
+   */
+  effective: (packId: string) => Record<string, unknown>;
+  /** Where each effective value came from, so the agent can explain it. */
+  provenance: (packId: string) => Record<string, string>;
   today?: Date;
 };
 
@@ -187,16 +195,19 @@ export async function executeTool(
   try {
     switch (name) {
       case 'get_pack': {
-        const compliance = runComplianceChecks(pack.fields, { today });
+        const fields = runtime.effective(runtime.packId);
+        const compliance = runComplianceChecks(fields, { today });
         return {
           ok: true,
           result: {
             reference: pack.reference,
             status: pack.status,
-            tenant: tenantNameFrom(pack.fields),
-            property: propertyAddressFrom(pack.fields),
-            fields: pack.fields,
-            missing_essential: missingCoreFields(pack.fields).map((key) => ({ key, label: labelFor(key) })),
+            lifecycle: pack.lifecycle,
+            tenant: tenantNameFrom(fields),
+            property: propertyAddressFrom(fields),
+            fields,
+            inherited_from: runtime.provenance(runtime.packId),
+            missing_essential: missingCoreFields(fields).map((key) => ({ key, label: labelFor(key) })),
             compliance: summariseCompliance(compliance),
             notes: pack.notes.map((note) => note.text),
           },
@@ -213,7 +224,10 @@ export async function executeTool(
 
         runtime.store.updatePack(runtime.packId, { fields: merged });
 
-        const missing = missingCoreFields(merged);
+        // What is still missing is judged on the merged view, because the tenancy
+        // may already inherit half of it from its room or property.
+        const effective = runtime.effective(runtime.packId);
+        const missing = missingCoreFields(effective);
         return {
           ok: true,
           result: {
@@ -226,17 +240,18 @@ export async function executeTool(
       }
 
       case 'check_compliance': {
-        const compliance = runComplianceChecks(pack.fields, { today });
+        const compliance = runComplianceChecks(runtime.effective(runtime.packId), { today });
         return { ok: true, result: summariseCompliance(compliance) };
       }
 
       case 'list_documents': {
-        const recommended = new Set(runtime.registry.suggestSelection(pack.fields));
+        const effective = runtime.effective(runtime.packId);
+        const recommended = new Set(runtime.registry.suggestSelection(effective));
         return {
           ok: true,
           result: {
             reference: pack.reference,
-            documents: runtime.registry.list(pack.fields).map((doc) => ({
+            documents: runtime.registry.list(effective).map((doc) => ({
               id: doc.id,
               title: doc.title,
               category: doc.category,
@@ -249,7 +264,8 @@ export async function executeTool(
       }
 
       case 'generate_documents': {
-        const compliance = runComplianceChecks(pack.fields, { today });
+        const effective = runtime.effective(runtime.packId);
+        const compliance = runComplianceChecks(effective, { today });
         if (!compliance.ok) {
           return {
             ok: false,
@@ -279,7 +295,7 @@ export async function executeTool(
           store: runtime.store,
           registry: runtime.registry,
           packId: runtime.packId,
-          fields: pack.fields,
+          fields: effective,
           templateIds,
           fallbackFields: runtime.fallbackFields,
           today,

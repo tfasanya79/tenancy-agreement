@@ -404,11 +404,16 @@ tenancy-agreement/
 │   │   ├── loop.ts            the tool-calling loop
 │   │   ├── tools.ts           the eight tools, and their guards
 │   │   └── prompts.ts         the system prompt
+│   ├── backoffice/
+│   │   ├── entities.ts        landlords, properties, rooms, tenants, agency settings
+│   │   ├── inheritance.ts     the prefill layers, and where each value came from
+│   │   ├── context.ts         a tenancy merged with the records it points at
+│   │   └── migrate.ts         derives records from packs that already exist
 │   ├── util/zip.ts            reads and writes ZIP (Word files are ZIPs)
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     197 tests
+├── tests/                     209 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -425,7 +430,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 197 tests |
+| `pnpm test` | Run the 209 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm sample` | Rebuild `samples/` from the templates |
@@ -523,11 +528,14 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 197 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 209 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
 | Room-by-room lettings | ✅ `property.room_number`, first payment date derived from the start date |
+| Back office — landlords, properties, rooms, tenants | ✅ records, screens, and a migration that links the packs you already have |
+| Prefilled forms | ✅ a new tenancy in an existing room needs three typed details; every other value is inherited and labelled with where it came from |
+| Agency settings | ✅ edit your details in the app instead of a config file |
 | Agreement audit — is an uploaded document still current? | ✅ flags assured shorthold, section 21, fixed terms and vague rent reviews |
 | Proofreading a document for internal contradictions | ✅ a weekday that does not match its date, two different rent due days, a fixed late-payment fee, a mistyped ordinal |
 | Repairing an agency's own contracts | ✅ `pnpm repair:contracts` rewrites the defective clauses in place, keeps the layout, and logs every change for sign-off |
@@ -551,7 +559,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 197 tests
+pnpm test        # 209 tests
 pnpm typecheck
 ```
 

@@ -17,6 +17,12 @@ const state = {
   activeId: null,
   detail: null,
   tab: 'assistant',
+  /** 'tenancy' shows one pack; 'backoffice' shows the agency's records. */
+  view: 'tenancy',
+  boTab: 'settings',
+  backOffice: null,
+  /** Fields the user has actually typed, so inherited values are not frozen. */
+  dirty: new Set(),
   selection: new Set(),
   chat: new Map(), // packId -> [{ role, text, trace }]
   streaming: false,
@@ -258,6 +264,11 @@ async function deletePack() {
 
 function renderMain() {
   const main = $('#main');
+
+  if (state.view === 'backoffice') {
+    renderBackOffice(main);
+    return;
+  }
 
   if (state.detail === null) {
     main.replaceChildren(
@@ -660,6 +671,9 @@ function handleAgentEvent(event, reply, rerender) {
 
 function renderDetails() {
   const { pack, readiness } = state.detail;
+  // The merged view: the tenancy's own values over what it inherits.
+  const values = state.detail.fields ?? pack.fields;
+  const provenance = state.detail.provenance ?? {};
   const byGroup = new Map(state.groups.map((group) => [group.id, []]));
   for (const field of state.fields) {
     if (byGroup.has(field.group)) byGroup.get(field.group).push(field);
@@ -667,11 +681,16 @@ function renderDetails() {
 
   const filled = state.fields.filter((field) => {
     if (field.type === 'people') {
-      const people = pack.fields[field.key];
+      const people = values[field.key];
       return Array.isArray(people) && people.some((person) => person && person.full_name);
     }
-    const value = pack.fields[field.key];
+    const value = values[field.key];
     return value !== undefined && value !== null && String(value).trim() !== '';
+  }).length;
+
+  const inheritedCount = state.fields.filter((field) => {
+    const source = provenance[field.key];
+    return source !== undefined && source !== 'tenancy' && source !== 'derived';
   }).length;
 
   const progress = el(
@@ -681,14 +700,15 @@ function renderDetails() {
     ' details filled in' +
       (readiness.missingCore.length > 0
         ? ` · ${readiness.missingCore.length} essential${readiness.missingCore.length === 1 ? '' : 's'} still missing`
-        : ' · everything essential is here'),
+        : ' · everything essential is here') +
+      (inheritedCount > 0 ? ` · ${inheritedCount} pre-filled for you` : ''),
   );
 
   const sections = state.groups
     .map((group) => {
       const fields = byGroup.get(group.id);
       if (fields === undefined || fields.length === 0) return null;
-      const open = ['tenants', 'property', 'tenancy'].includes(group.id) || fields.some((field) => isMissing(pack, field));
+      const open = ['tenants', 'property', 'tenancy'].includes(group.id) || fields.some((field) => isMissing(values, field));
       return el(
         'details',
         { class: 'form-section', open: open },
@@ -698,7 +718,7 @@ function renderDetails() {
           el('span', {}, group.title),
           el('span', { class: 'section-blurb' }, group.blurb),
         ),
-        el('div', { class: 'form-body' }, ...fields.map((field) => renderField(field, pack))),
+        el('div', { class: 'form-body' }, ...fields.map((field) => renderField(field, values, provenance))),
       );
     })
     .filter(Boolean);
@@ -712,7 +732,7 @@ function renderDetails() {
   return el(
     'div',
     {},
-    pack.fields === null || Object.keys(pack.fields).length === 0
+    Object.keys(pack.fields ?? {}).length === 0
       ? el(
           'div',
           { class: 'notice notice-info' },
@@ -724,28 +744,58 @@ function renderDetails() {
   );
 }
 
-function isMissing(pack, field) {
+function isMissing(values, field) {
   if (field.type === 'people') {
-    const people = pack.fields[field.key];
+    const people = values[field.key];
     return !(Array.isArray(people) && people.some((person) => person && person.full_name));
   }
-  const value = pack.fields[field.key];
+  const value = values[field.key];
   return value === undefined || value === null || String(value).trim() === '';
 }
 
-function renderField(field, pack) {
-  if (field.type === 'people') return renderPeopleField(field, pack);
+/** A badge saying where a pre-filled value came from. */
+function provenanceBadge(source) {
+  if (source === undefined || source === 'tenancy' || source === 'derived') return null;
+  const wording = {
+    room: 'from the room',
+    property: 'from the property',
+    landlord: 'from the landlord',
+    agency: 'from your agency',
+  };
+  return el('span', { class: `prov prov-${source}` }, wording[source] ?? source);
+}
 
-  const value = pack.fields[field.key] ?? '';
-  const missing = field.core === true && isMissing(pack, field);
+function renderField(field, values, provenance) {
+  if (field.type === 'people') return renderPeopleField(field, values);
 
-  let input;
+  const value = values[field.key] ?? '';
+  const missing = field.core === true && isMissing(values, field);
+  const source = provenance[field.key];
+  const inherited = source !== undefined && source !== 'tenancy' && source !== 'derived';
+
+  // Only fields the user actually types are sent when saving, so a prefilled
+  // value is never written down and frozen into this tenancy.
+  const track = () => {
+    state.dirty.add(field.key);
+    queueSave();
+  };
+
   const common = {
     id: `field-${field.key}`,
     'data-field': field.key,
-    onInput: queueSave,
-    onChange: queueSave,
+    onInput: track,
+    onChange: track,
   };
+
+  const label = el(
+    'label',
+    { for: `field-${field.key}` },
+    field.label,
+    field.core === true ? el('span', { class: 'is-missing' }, ' *') : null,
+    provenanceBadge(source),
+  );
+
+  let input;
 
   if (field.type === 'select') {
     input = el(
@@ -765,10 +815,11 @@ function renderField(field, pack) {
     input = el('input', { ...common, type: 'number', value: String(value) });
   } else if (field.type === 'money') {
     const inner = el('input', { ...common, type: 'text', inputmode: 'decimal', value: String(value) });
+    if (inherited) inner.classList.add('is-inherited');
     return el(
       'div',
       { class: 'field' },
-      el('label', { for: `field-${field.key}` }, field.label, field.core === true ? el('span', { class: 'is-missing' }, ' *') : null),
+      label,
       el('div', { class: 'money-input' }, el('span', { class: 'prefix' }, '£'), inner),
       field.help ? el('span', { class: 'help' }, field.help) : null,
     );
@@ -777,24 +828,26 @@ function renderField(field, pack) {
   }
 
   if (missing) input.classList.add('is-required-empty');
+  if (inherited) input.classList.add('is-inherited');
 
   return el(
     'div',
     { class: 'field' },
-    el(
-      'label',
-      { for: `field-${field.key}` },
-      field.label,
-      field.core === true ? el('span', { class: 'is-missing' }, ' *') : null,
-    ),
+    label,
     input,
     field.help ? el('span', { class: 'help' }, field.help) : null,
   );
 }
 
-function renderPeopleField(field, pack) {
-  const people = Array.isArray(pack.fields[field.key]) ? pack.fields[field.key] : [];
+function renderPeopleField(field, values) {
+  const people = Array.isArray(values[field.key]) ? values[field.key] : [];
   const container = el('div', { 'data-people': field.key });
+
+  // Editing a tenant is an explicit change, so the list becomes this tenancy's own.
+  const markPeopleDirty = () => {
+    state.dirty.add(field.key);
+    queueSave();
+  };
 
   const addPerson = (person = {}) => {
     const index = container.querySelectorAll('.person-card').length;
@@ -813,7 +866,7 @@ function renderPeopleField(field, pack) {
             onClick: () => {
               card.remove();
               renumber();
-              queueSave();
+              markPeopleDirty();
             },
           },
           'Remove',
@@ -828,13 +881,13 @@ function renderPeopleField(field, pack) {
             { class: 'field' },
             el('label', {}, child.label),
             child.type === 'textarea'
-              ? el('textarea', { 'data-person-key': child.key, onInput: queueSave }, person[child.key] ?? '')
+              ? el('textarea', { 'data-person-key': child.key, onInput: markPeopleDirty }, person[child.key] ?? '')
               : el('input', {
                   type: child.type === 'date' ? 'date' : 'text',
                   'data-person-key': child.key,
                   value: person[child.key] ?? '',
                   placeholder: child.placeholder || '',
-                  onInput: queueSave,
+                  onInput: markPeopleDirty,
                 }),
           ),
         ),
@@ -867,7 +920,7 @@ function renderPeopleField(field, pack) {
         style: { marginTop: '.6rem' },
         onClick: () => {
           addPerson();
-          queueSave();
+          markPeopleDirty();
         },
       },
       'Add another tenant',
@@ -878,14 +931,17 @@ function renderPeopleField(field, pack) {
 function collectFields() {
   const fields = {};
 
+  // Only what the user has actually typed. Anything else shown in the form is an
+  // inherited value, and writing it down would freeze it into this tenancy.
   document.querySelectorAll('[data-field]').forEach((input) => {
     const key = input.dataset.field;
-    const value = input.value;
-    if (value !== '') fields[key] = value;
+    if (!state.dirty.has(key)) return;
+    fields[key] = input.value;
   });
 
   document.querySelectorAll('[data-people]').forEach((container) => {
     const key = container.dataset.people;
+    if (!state.dirty.has(key)) return;
     const people = [...container.querySelectorAll('.person-card')]
       .map((card) => {
         const person = {};
@@ -895,7 +951,7 @@ function collectFields() {
         return person;
       })
       .filter((person) => Object.keys(person).length > 0);
-    if (people.length > 0) fields[key] = people;
+    fields[key] = people;
   });
 
   return fields;
@@ -922,16 +978,17 @@ async function saveFields(announce) {
       body: JSON.stringify({ fields }),
     });
     state.detail = updated;
+    state.dirty.clear();
 
     const progress = $('#form-progress');
     if (progress !== null) {
       const readiness = updated.readiness;
       const filled = state.fields.filter((field) => {
         if (field.type === 'people') {
-          const people = updated.pack.fields[field.key];
+          const people = (updated.fields ?? updated.pack.fields)[field.key];
           return Array.isArray(people) && people.some((person) => person && person.full_name);
         }
-        const value = updated.pack.fields[field.key];
+        const value = (updated.fields ?? updated.pack.fields)[field.key];
         return value !== undefined && value !== null && String(value).trim() !== '';
       }).length;
       progress.replaceChildren(
@@ -1300,9 +1357,462 @@ function renderChecks() {
   );
 }
 
+/* ----------------------------------------------------------- back office --- */
+
+const BO_TABS = [
+  ['settings', 'Our details'],
+  ['properties', 'Properties & rooms'],
+  ['people', 'Landlords & tenants'],
+  ['tidy', 'Tidy up'],
+];
+
+async function loadBackOffice() {
+  state.backOffice = await api('/api/backoffice');
+  return state.backOffice;
+}
+
+function renderBackOffice(main) {
+  const data = state.backOffice;
+
+  const header = el(
+    'div',
+    { class: 'pack-head' },
+    el(
+      'div',
+      { class: 'pack-title' },
+      el('h2', {}, 'Back office'),
+      el('div', { class: 'pack-where' }, 'The details that stay the same, so a new tenancy only asks what changed.'),
+    ),
+    el(
+      'div',
+      { class: 'pack-actions' },
+      el(
+        'button',
+        {
+          class: 'btn',
+          type: 'button',
+          onClick: () => {
+            state.view = 'tenancy';
+            renderMain();
+          },
+        },
+        'Back to tenancies',
+      ),
+    ),
+  );
+
+  const tabs = el(
+    'div',
+    { class: 'bo-links' },
+    ...BO_TABS.map(([id, label]) =>
+      el(
+        'button',
+        {
+          class: `btn btn-sm${state.boTab === id ? ' is-active' : ''}`,
+          type: 'button',
+          onClick: () => {
+            state.boTab = id;
+            renderMain();
+          },
+        },
+        label,
+      ),
+    ),
+  );
+
+  if (data === null || data === undefined) {
+    main.replaceChildren(header, el('p', { class: 'small' }, 'Loading…'));
+    return;
+  }
+
+  let body;
+  if (state.boTab === 'properties') body = renderPropertiesSection(data);
+  else if (state.boTab === 'people') body = renderPeopleSection(data);
+  else if (state.boTab === 'tidy') body = renderMigrationSection(data);
+  else body = renderSettingsSection(data);
+
+  main.replaceChildren(header, tabs, body);
+}
+
+function renderSettingsSection(data) {
+  const s = data.settings ?? {};
+  const field = (key, label, help) =>
+    el(
+      'div',
+      { class: 'field' },
+      el('label', { for: `set-${key}` }, label),
+      el('input', { id: `set-${key}`, type: 'text', value: s[key] ?? '' }),
+      help ? el('span', { class: 'help' }, help) : null,
+    );
+
+  const read = (key) => $(`#set-${key}`).value.trim();
+
+  return el(
+    'div',
+    { class: 'bo-grid' },
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Your agency'),
+      el('p', { class: 'small' }, 'These appear on every document and pack. Set them once here instead of editing a config file.'),
+      field('name', 'Agency name'),
+      el('div', { class: 'grid-2' }, field('phone', 'Phone'), field('email', 'Email')),
+      field('address', 'Address'),
+      el(
+        'div',
+        { class: 'grid-2' },
+        field('clientMoneyScheme', 'Client money protection scheme', 'e.g. Propertymark Client Money Protection'),
+        field('redressScheme', 'Redress scheme', 'e.g. The Property Ombudsman'),
+      ),
+      el(
+        'div',
+        { class: 'grid-2' },
+        field('negotiator', 'Negotiator name', 'Prints on documents that name a person.'),
+        field('rentAccount', 'Rent account details', 'Where tenants pay.'),
+      ),
+      el(
+        'div',
+        { class: 'form-actions' },
+        el('span', { class: 'small' }, 'Saved for every future pack.'),
+        el(
+          'button',
+          {
+            class: 'btn btn-primary',
+            type: 'button',
+            onClick: async () => {
+              try {
+                await api('/api/settings', {
+                  method: 'PUT',
+                  body: JSON.stringify({
+                    name: read('name'),
+                    phone: read('phone'),
+                    email: read('email'),
+                    address: read('address'),
+                    clientMoneyScheme: read('clientMoneyScheme'),
+                    redressScheme: read('redressScheme'),
+                    negotiator: read('negotiator'),
+                    rentAccount: read('rentAccount'),
+                  }),
+                });
+                toast('Your details are saved.');
+                await loadBackOffice();
+                renderMain();
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Save our details',
+        ),
+      ),
+    ),
+  );
+}
+
+function renderPropertiesSection(data) {
+  const sections = [];
+
+  for (const property of data.properties) {
+    const roomRows = property.rooms.map((room) =>
+      el(
+        'div',
+        { class: 'bo-room' },
+        el('span', {}, room.roomNumber === '' ? 'Whole property' : room.roomNumber),
+        el(
+          'span',
+          { class: 'small' },
+          [
+            room.rentAmount === null ? null : `£${room.rentAmount}`,
+            room.status,
+            `${room.tenancyCount} tenanc${room.tenancyCount === 1 ? 'y' : 'ies'}`,
+          ]
+            .filter(Boolean)
+            .join(' · '),
+        ),
+      ),
+    );
+
+    const roomNumber = el('input', { type: 'text', placeholder: 'Room number' });
+    const rent = el('input', { type: 'text', inputmode: 'decimal', placeholder: 'Rent £' });
+    const deposit = el('input', { type: 'text', inputmode: 'decimal', placeholder: 'Deposit £' });
+
+    sections.push(
+      el(
+        'div',
+        { class: 'bo-section' },
+        el('h3', {}, property.addressLine1 === '' ? '(no address)' : property.addressLine1),
+        el(
+          'p',
+          { class: 'small' },
+          [property.city, property.postcode, property.landlord === null ? null : property.landlord.name]
+            .filter(Boolean)
+            .join(' · ') || 'No landlord yet',
+        ),
+        property.rooms.length > 0
+          ? el('div', { class: 'bo-sub' }, ...roomRows)
+          : el('p', { class: 'small' }, 'No rooms yet.'),
+        el('div', { class: 'grid-2 mt' }, roomNumber, rent, deposit),
+        el(
+          'div',
+          { class: 'form-actions' },
+          el('span', { class: 'small' }, 'A room is what a tenancy points at.'),
+          el(
+            'button',
+            {
+              class: 'btn',
+              type: 'button',
+              onClick: async () => {
+                try {
+                  const toNumber = (text) => (text === '' ? null : Number(text.replace(/[^\d.]/g, '')));
+                  await api('/api/backoffice/rooms', {
+                    method: 'POST',
+                    body: JSON.stringify({
+                      propertyId: property.id,
+                      roomNumber: roomNumber.value.trim(),
+                      rentAmount: toNumber(rent.value),
+                      depositAmount: toNumber(deposit.value),
+                      status: 'available',
+                    }),
+                  });
+                  toast('Room added.');
+                  await loadBackOffice();
+                  renderMain();
+                } catch (error) {
+                  toast(error.message, true);
+                }
+              },
+            },
+            'Add room',
+          ),
+        ),
+      ),
+    );
+  }
+
+  const landlordSelect = el(
+    'select',
+    {},
+    el('option', { value: '' }, '— landlord —'),
+    ...data.landlords.map((landlord) => el('option', { value: landlord.id }, landlord.name)),
+  );
+  const line1 = el('input', { type: 'text', placeholder: 'Address line 1' });
+  const city = el('input', { type: 'text', placeholder: 'Town or city' });
+  const postcode = el('input', { type: 'text', placeholder: 'Postcode' });
+
+  sections.push(
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Add a property'),
+      el('p', { class: 'small' }, 'A property is an address. Rooms belong to it, and tenancies point at a room.'),
+      el('div', { class: 'grid-2' }, line1, city, postcode, landlordSelect),
+      el(
+        'div',
+        { class: 'form-actions' },
+        el('span', { class: 'small' }, `${data.stats.properties} propert${data.stats.properties === 1 ? 'y' : 'ies'}`),
+        el(
+          'button',
+          {
+            class: 'btn btn-primary',
+            type: 'button',
+            onClick: async () => {
+              try {
+                await api('/api/backoffice/properties', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    addressLine1: line1.value.trim(),
+                    city: city.value.trim(),
+                    postcode: postcode.value.trim(),
+                    landlordId: landlordSelect.value === '' ? null : landlordSelect.value,
+                  }),
+                });
+                toast('Property added.');
+                await loadBackOffice();
+                renderMain();
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Add property',
+        ),
+      ),
+    ),
+  );
+
+  return el('div', { class: 'bo-grid' }, ...sections);
+}
+
+function renderPeopleSection(data) {
+  const landlordRows = data.landlords.map((landlord) =>
+    el(
+      'div',
+      { class: 'bo-row' },
+      el(
+        'div',
+        { class: 'bo-what' },
+        el('strong', {}, landlord.name === '' ? '(unnamed landlord)' : landlord.name),
+        el('span', {}, `${landlord.propertyCount} propert${landlord.propertyCount === 1 ? 'y' : 'ies'}`),
+      ),
+    ),
+  );
+
+  const tenantRows = data.tenants.map((tenant) =>
+    el(
+      'div',
+      { class: 'bo-row' },
+      el(
+        'div',
+        { class: 'bo-what' },
+        el('strong', {}, tenant.fullName === '' ? '(unnamed tenant)' : tenant.fullName),
+        el(
+          'span',
+          {},
+          [tenant.email, `${tenant.tenancyCount} tenanc${tenant.tenancyCount === 1 ? 'y' : 'ies'}`]
+            .filter(Boolean)
+            .join(' · '),
+        ),
+      ),
+    ),
+  );
+
+  const landlordName = el('input', { type: 'text', placeholder: 'Landlord name' });
+  const landlordAddress = el('input', { type: 'text', placeholder: 'Address for notices' });
+
+  return el(
+    'div',
+    { class: 'bo-grid' },
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Landlords'),
+      el('p', { class: 'small' }, 'Every landlord you act for. Their name and address go onto every agreement for their properties.'),
+      data.landlords.length === 0 ? el('p', { class: 'small' }, 'None yet.') : el('div', {}, ...landlordRows),
+      el('div', { class: 'grid-2 mt' }, landlordName, landlordAddress),
+      el(
+        'div',
+        { class: 'form-actions' },
+        el('span', { class: 'small' }, `${data.landlords.length} landlord${data.landlords.length === 1 ? '' : 's'}`),
+        el(
+          'button',
+          {
+            class: 'btn btn-primary',
+            type: 'button',
+            onClick: async () => {
+              try {
+                await api('/api/backoffice/landlords', {
+                  method: 'POST',
+                  body: JSON.stringify({ name: landlordName.value.trim(), address: landlordAddress.value.trim() }),
+                });
+                toast('Landlord added.');
+                await loadBackOffice();
+                renderMain();
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Add landlord',
+        ),
+      ),
+    ),
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Tenants'),
+      el('p', { class: 'small' }, `Everyone who has ever signed. ${data.stats.tenants} on record.`),
+      data.tenants.length === 0 ? el('p', { class: 'small' }, 'None yet.') : el('div', {}, ...tenantRows),
+    ),
+  );
+}
+
+function renderMigrationSection(data) {
+  if (data.unlinked.length === 0) {
+    return el('div', { class: 'notice notice-info' }, 'Every tenancy is linked to a property. Nothing to tidy up.');
+  }
+
+  const planHolder = el('div', {});
+
+  return el(
+    'div',
+    { class: 'bo-grid' },
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Tidy up existing tenancies'),
+      el(
+        'p',
+        { class: 'small' },
+        `${data.unlinked.length} tenanc${data.unlinked.length === 1 ? 'y is' : 'ies are'} not linked to a property yet. This finds the properties, rooms, landlords and tenants already in your packs and links them. Nothing is deleted, and you confirm before anything is written.`,
+      ),
+      planHolder,
+      el(
+        'div',
+        { class: 'form-actions' },
+        el('span', { class: 'small' }, 'Review first, then confirm.'),
+        el(
+          'button',
+          {
+            class: 'btn',
+            type: 'button',
+            onClick: async () => {
+              try {
+                const plan = await api('/api/backoffice/migrate/preview', { method: 'POST', body: '{}' });
+                planHolder.replaceChildren(
+                  el(
+                    'div',
+                    { class: 'bo-sub' },
+                    el('div', { class: 'bo-room' }, el('span', {}, 'Landlords'), el('span', {}, String(plan.landlords.length))),
+                    el('div', { class: 'bo-room' }, el('span', {}, 'Properties'), el('span', {}, String(plan.properties.length))),
+                    el('div', { class: 'bo-room' }, el('span', {}, 'Rooms'), el('span', {}, String(plan.rooms.length))),
+                    el('div', { class: 'bo-room' }, el('span', {}, 'Tenants'), el('span', {}, String(plan.tenants.length))),
+                    ...plan.warnings.map((warning) => el('p', { class: 'small' }, warning)),
+                  ),
+                  el(
+                    'button',
+                    {
+                      class: 'btn btn-primary mt',
+                      type: 'button',
+                      onClick: async () => {
+                        try {
+                          const applied = await api('/api/backoffice/migrate/apply', {
+                            method: 'POST',
+                            body: JSON.stringify({ confirm: true }),
+                          });
+                          toast(`Linked ${applied.result.linked} tenanc${applied.result.linked === 1 ? 'y' : 'ies'}.`);
+                          await refreshPacks();
+                          await loadBackOffice();
+                          renderMain();
+                        } catch (error) {
+                          toast(error.message, true);
+                        }
+                      },
+                    },
+                    'Confirm and link',
+                  ),
+                );
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Show me what it will do',
+        ),
+      ),
+    ),
+  );
+}
+
 /* ------------------------------------------------------------------ boot --- */
 
-$('#new-pack').addEventListener('click', createPack);
+$('#new-pack').addEventListener('click', () => {
+  state.view = 'tenancy';
+  void createPack();
+});
+
+$('#back-office').addEventListener('click', () => {
+  void openBackOffice().catch((error) => toast(error.message, true));
+});
 
 document.addEventListener('keydown', (event) => {
   if (event.key === 'Escape') {

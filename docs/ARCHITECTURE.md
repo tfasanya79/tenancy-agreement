@@ -15,10 +15,11 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Entry point | `src/server.ts` | Reads config, loads templates, opens the database, starts Fastify |
 | HTTP surface | `src/app.ts` | Every route, in one file, in the order you would look for them |
 | Documents | `src/docs/` | Template loading, expansion, Markdown parsing, Word/HTML writing, checks |
+| Back office | `src/backoffice/` | Landlords, properties, rooms, tenants; the prefill layers and how they merge |
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 197 tests on `node:test` |
+| Tests | `tests/` | 209 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -277,6 +278,9 @@ data directory.
 | Change how a document's values are substituted | `src/docs/docxFill.ts` |
 | Change how a value is formatted (`£1,450`, `1 November 2026`) | `formatLike()` in `src/docs/docxFill.ts` |
 | Change the derived first payment date | `paymentDateFor()` in `src/docs/fields.ts` |
+| Change what a tenancy inherits | `src/backoffice/inheritance.ts` |
+| Add a back-office record type | `src/backoffice/entities.ts` |
+| Change how existing packs are migrated | `src/backoffice/migrate.ts` |
 | Change environment variables | `src/config.ts` **and** `.env.example` |
 
 After changing anything in `src/docs/` or `templates/`, run `pnpm sample` — it
@@ -336,6 +340,7 @@ exercises the whole path with a document shaped like a letting agency's.
 | `api.test.ts` | Every route via `fastify.inject`, including the SSE stream and ZIP download |
 | `agent.test.ts` | DeepSeek client (errors, retries, tool parsing), each tool, the loop, the prompt |
 | `audit.test.ts` | The agreement audit, including a guard that all nine shipped templates pass it |
+| `backoffice.test.ts` | Inheritance precedence and provenance, migration preview and apply, and a three-field tenancy rendering a real document |
 | `docxFill.test.ts` | ZIP round trip, reading a `.docx`, substituting values across split runs, formatting preservation, and targeting an ambiguous value |
 
 Tests never touch the project's real `data/` folder — `tests/helpers.ts` hands out

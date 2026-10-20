@@ -8,6 +8,28 @@ This is a design note, not a description of what exists. For current status see 
 
 ---
 
+## What is built
+
+The first slice of M1 is in the app and covered by tests:
+
+| | |
+| --- | --- |
+| **Our details** | Agency name, address, phone, email, client money protection and redress scheme, negotiator, rent account — saved in the app, no config file |
+| **Properties and rooms** | Add a property and its rooms; each room carries its rent and deposit |
+| **Landlords and tenants** | A register, with how many properties or tenancies each one has |
+| **Prefilled tenancy form** | Every inherited value is filled in and labelled with where it came from; only what differs is typed |
+| **Tidy up** | Finds the properties, rooms, landlords and tenants already in existing packs, shows what it would create, and links them on confirmation |
+
+Typing three things — tenant name, tenant email, start date — now produces a full
+document set in an existing room. `tests/backoffice.test.ts` asserts exactly that,
+including that the rendered agreement contains the inherited address and the room's
+rent.
+
+Not yet built from this design: the full lifecycle screens (upcoming → active →
+ending → ended), editing a shared value with a "this affects 3 tenancies" prompt, and
+the cross-pack dashboard.
+
+---
 ## The problem with the current shape
 
 Today a **pack is an island**. Each one holds a flat dictionary of details, so for
