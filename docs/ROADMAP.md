@@ -117,10 +117,9 @@ into a single pack, and one button puts those dates in the agent's calendar.
 
 *The client lets room by room. Four rooms should not mean four identical rounds of typing.*
 
-- [ ] "Add another room" on a property: clone the tenancy details, changing only the room
-      number, tenant and dates.
-- [ ] Generate one pack per room from a single screen, each with its own tenant.
-- [ ] Keep each room's documents separate — one tenant must never see another's paperwork.
+- [x] One form to let several rooms: a row per room, and one pack created per tenant.
+- [x] Generate one pack per room from a single screen, each with its own tenant.
+- [x] Keep each room's documents separate — one tenant never sees another's paperwork.
 
 **Done when:** filling a four-room house takes one form and one click, and produces four
 independent packs and eight documents.
@@ -172,10 +171,9 @@ errors automatically, without being told where to look.
 
 ## M7 · Make it safe for a non-technical owner
 
-- [ ] **Backup button**: one click downloads a ZIP of `data/`. Nobody is going to run `rsync`.
-- [ ] **Health panel** in the interface: templates loaded, key present, disk space, last
-      backup.
-- [ ] Restore instructions that a non-developer can follow.
+- [x] **Backup button**: one click downloads a ZIP of `data/` — the database copied with VACUUM INTO, every document, every upload, and restore instructions.
+- [x] **Health panel**: tenancies, records, documents, uploads, templates and warnings, assistant status, disk space and where the data lives.
+- [x] Restore instructions a non-developer can follow — included in the backup itself.
 
 **Done when:** losing the laptop is survivable without a developer.
 

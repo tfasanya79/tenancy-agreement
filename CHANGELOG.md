@@ -8,6 +8,35 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — M7: backup and health
+
+There are real tenancies, documents and uploads in `data/` now, and they survived
+only by copying a folder by hand.
+
+- **Download a backup**: one zip containing `tenancydesk.db`, every generated
+  document, every uploaded original, and restore instructions written for someone
+  who is not a developer. The database is copied with `VACUUM INTO`, so it is
+  consistent while the app keeps running — copying the file by hand mid-write can
+  produce a backup that will not open.
+- **A Health & backup tab**: tenancies, records, documents, uploads, templates and
+  their warnings, assistant status, the database size, how many documents are on
+  disk, free space, and where everything lives.
+
+### Added — M4: let several rooms at once
+
+One form per property, a row per room: tenant name, email and start date. Press
+*Create the packs* and each row becomes its own tenancy, linked to its own room and
+tenant, with the rent and address inherited and the lifecycle set from the start
+date. Each pack keeps its own documents — one tenant never sees another's paperwork.
+
+Verified live: four rooms on one property produced four packs in one call, with the
+right room, the room's rent, the inherited address, and the past start correctly
+marked active while the future ones stayed upcoming.
+
+248 tests, including `backup.test.ts` (the archive opens as a working database and
+still holds the notes) and an API test for the bulk creation.
+
+
 ### Added — M3: what's due, and a calendar
 
 The app computed statutory dates per pack, but nobody was told about them. Now:

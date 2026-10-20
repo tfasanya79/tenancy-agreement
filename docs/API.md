@@ -511,3 +511,12 @@ agent can come back to it, and it is skipped when filling.
 Ended tenancies are excluded — their dates no longer need chasing. Each event is
 all-day, carries a stable UID (so re-importing updates rather than duplicates), and
 has a reminder the day before.
+---
+
+## Backup, health and bulk lets
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/api/backup` | One zip: `tenancydesk.db` (copied with `VACUUM INTO`, so it is consistent while the app runs), `documents/`, `uploads/`, and restore instructions |
+| `GET` | `/api/health` | Counts, templates and their warnings, assistant status, Node version, and what is on disk |
+| `POST` | `/api/packs/bulk` | Create several tenancies at once: `{ lets: [{ roomId, tenantName, tenantEmail, startDate }] }`. Each becomes its own pack, linked to its own room and tenant, with the lifecycle set from the start date |

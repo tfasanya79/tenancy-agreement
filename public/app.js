@@ -1657,13 +1657,19 @@ const BO_TABS = [
   ['properties', 'Properties & rooms'],
   ['people', 'Landlords & tenants'],
   ['documents', 'Our documents'],
+  ['health', 'Health & backup'],
   ['tidy', 'Tidy up'],
 ];
 
 async function loadBackOffice() {
-  const [data, custom] = await Promise.all([api('/api/backoffice'), api('/api/custom-templates')]);
+  const [data, custom, health] = await Promise.all([
+    api('/api/backoffice'),
+    api('/api/custom-templates'),
+    api('/api/health'),
+  ]);
   state.backOffice = data;
   state.customTemplates = custom.templates ?? [];
+  state.health = health;
   return data;
 }
 
@@ -1725,6 +1731,7 @@ function renderBackOffice(main) {
   if (state.boTab === 'properties') body = renderPropertiesSection(data);
   else if (state.boTab === 'people') body = renderPeopleSection(data);
   else if (state.boTab === 'documents') body = renderOurDocumentsSection();
+  else if (state.boTab === 'health') body = renderHealthSection();
   else if (state.boTab === 'tidy') body = renderMigrationSection(data);
   else body = renderSettingsSection(data);
 
@@ -1957,6 +1964,7 @@ function renderPropertiesSection(data) {
             'Add room',
           ),
         ),
+        bulkLetsPanel(property),
       ),
     );
   }
@@ -2013,6 +2021,97 @@ function renderPropertiesSection(data) {
   );
 
   return el('div', { class: 'bo-grid' }, ...sections);
+}
+
+/**
+ * Let several rooms at once: one row per room, one button, one pack each.
+ * Each pack is separate — one tenant never sees another's paperwork.
+ */
+function bulkLetsPanel(property) {
+  if (property.rooms.length === 0) return null;
+
+  const rows = property.rooms.map((room) => {
+    const name = el('input', { class: 'bo-inline bo-wide', placeholder: 'Tenant name' });
+    const email = el('input', { class: 'bo-inline bo-wide', placeholder: 'Email' });
+    const start = el('input', { class: 'bo-inline', type: 'date' });
+    return {
+      room,
+      name,
+      email,
+      start,
+      node: el(
+        'div',
+        { class: 'bo-room bo-room-edit' },
+        el('span', { class: 'bo-room-name' }, room.roomNumber === '' ? 'Whole property' : room.roomNumber),
+        name,
+        email,
+        start,
+      ),
+    };
+  });
+
+  const panel = el(
+    'div',
+    { class: 'bo-sub', style: { display: 'none' } },
+    el('p', { class: 'small' }, 'Fill in the tenants you already have. Each row becomes its own pack, with its own documents.'),
+    ...rows.map((row) => row.node),
+  );
+
+  const toggle = el(
+    'button',
+    {
+      class: 'btn btn-sm',
+      type: 'button',
+      onClick: () => {
+        panel.style.display = panel.style.display === 'none' ? '' : 'none';
+      },
+    },
+    'Let several rooms',
+  );
+
+  const create = el(
+    'button',
+    {
+      class: 'btn btn-primary btn-sm',
+      type: 'button',
+      onClick: async () => {
+        const lets = rows
+          .filter((row) => row.name.value.trim() !== '')
+          .map((row) => ({
+            roomId: row.room.id,
+            tenantName: row.name.value.trim(),
+            tenantEmail: row.email.value.trim(),
+            startDate: row.start.value,
+          }));
+
+        if (lets.length === 0) {
+          toast('Add a tenant name to at least one room.', true);
+          return;
+        }
+
+        try {
+          const result = await api('/api/packs/bulk', {
+            method: 'POST',
+            body: JSON.stringify({ lets }),
+          });
+          toast(`${result.packs} tenanc${result.packs === 1 ? 'y' : 'ies'} created.`);
+          await refreshPacks();
+          await loadBackOffice();
+          renderMain();
+        } catch (error) {
+          toast(error.message, true);
+        }
+      },
+    },
+    'Create the packs',
+  );
+
+  return el(
+    'div',
+    { style: { marginTop: '.6rem' } },
+    el('div', { class: 'form-actions' }, el('span', { class: 'small' }, 'One form, several tenancies.'), el('div', { style: { display: 'flex', gap: '.4rem' } }, toggle, create)),
+    panel,
+  );
 }
 
 function renderPeopleSection(data) {
@@ -2376,7 +2475,73 @@ function renderOurDocumentsSection() {
   );
 }
 
-function renderMigrationSection(data) {  if (data.unlinked.length === 0) {
+function renderHealthSection() {
+  const health = state.health ?? {};
+  const store = health.store ?? {};
+  const back = health.backOffice ?? {};
+  const disk = health.disk ?? {};
+
+  const bytes = (value) => {
+    if (typeof value !== 'number') return '—';
+    const units = ['bytes', 'KB', 'MB', 'GB'];
+    let size = value;
+    let unit = 0;
+    while (size >= 1024 && unit < units.length - 1) {
+      size /= 1024;
+      unit += 1;
+    }
+    return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+  };
+
+  const fact = (label, value) =>
+    el(
+      'div',
+      { class: 'bo-row' },
+      el('div', { class: 'bo-what' }, el('strong', {}, label)),
+      el('span', { class: 'small' }, String(value)),
+    );
+
+  return el(
+    'div',
+    { class: 'bo-grid' },
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Backup'),
+      el(
+        'p',
+        { class: 'small' },
+        'One file with everything: the database, every document generated, and every original you uploaded. Keep the copy somewhere that is not this computer.',
+      ),
+      el(
+        'div',
+        { class: 'form-actions' },
+        el('span', { class: 'small' }, 'Taken without stopping anything.'),
+        el('a', { class: 'btn btn-primary', href: '/api/backup' }, 'Download a backup'),
+      ),
+    ),
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Where things stand'),
+      fact('Tenancies', store.packs ?? 0),
+      fact('Documents generated', store.documents ?? 0),
+      fact('Assistant runs logged', store.runs ?? 0),
+      fact('Landlords · properties · rooms · tenants', `${back.landlords ?? 0} · ${back.properties ?? 0} · ${back.rooms ?? 0} · ${back.tenants ?? 0}`),
+      fact('Your documents uploaded', health.uploads ?? 0),
+      fact('Templates', `${health.templates ?? 0} · ${(health.templateWarnings ?? []).length} warning(s)`),
+      fact('Assistant', health.assistantAvailable ? `ready (${health.model})` : 'off — no API key'),
+      fact('Database file', bytes(disk.databaseBytes)),
+      fact('Generated documents on disk', `${disk.documentCount ?? 0} files`),
+      fact('Disk space free', typeof disk.freeBytes === 'number' ? bytes(disk.freeBytes) : 'not reported'),
+      fact('Data folder', disk.dataDir ?? '—'),
+      fact('Node', health.node ?? '—'),
+    ),
+  );
+}
+
+function renderMigrationSection(data) {
+  if (data.unlinked.length === 0) {
     return el('div', { class: 'notice notice-info' }, 'Every tenancy is linked to a property. Nothing to tidy up.');
   }
 

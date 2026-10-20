@@ -29,6 +29,7 @@ import { BackOffice } from './backoffice/entities.ts';
 import { contextFor, effectiveFields } from './backoffice/context.ts';
 import { applyMigration, previewMigration } from './backoffice/migrate.ts';
 import { aggregateDue } from './backoffice/due.ts';
+import { buildBackup, healthOf } from './backoffice/backup.ts';
 import { buildCalendar } from './util/ics.ts';
 import { CustomTemplateStore } from './backoffice/customTemplates.ts';
 import { buildReplacements, extractDocxText, fillDocx, fillDocxBlanks, formatLike, resolveFieldPath } from './docs/docxFill.ts';
@@ -190,12 +191,27 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.get('/api/health', async () => ({
     ok: true,
     store: store.stats(),
+    backOffice: backOffice.stats(),
+    uploads: customTemplates.list().length,
     templates: registry.size,
     templateWarnings: registry.warnings,
     assistantAvailable,
     model: config.deepseekModel,
     offlineMode: config.offlineMode,
+    node: process.versions.node,
+    disk: await healthOf(store.handle, config.dataDir),
   }));
+
+  /** One zip with the database, every document, and every upload. */
+  app.get('/api/backup', async (_request, reply) => {
+    const backup = await buildBackup(store.handle, config.dataDir);
+    const stamp = new Date().toISOString().slice(0, 10);
+    return reply
+      .code(200)
+      .header('Content-Type', 'application/zip')
+      .header('Content-Disposition', attachmentHeader(`tenancydesk-backup-${stamp}.zip`))
+      .send(backup.buffer);
+  });
 
   app.get('/api/config', async () => ({
     agency: {
@@ -551,6 +567,64 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       .header('Content-Type', 'text/calendar; charset=utf-8')
       .header('Content-Disposition', `attachment; filename="${pack.reference}-deadlines.ics"`)
       .send(calendar);
+  });
+
+  /**
+   * Let several rooms at once.
+   *
+   * Each entry creates the tenant record, the tenancy, and the links — so four
+   * rooms become four independent packs from one form, each with its own tenant
+   * and its own documents. They are separate records on purpose: one tenant must
+   * never see another's paperwork.
+   */
+  app.post('/api/packs/bulk', async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const rawLets = Array.isArray(body['lets']) ? body['lets'] : [];
+    if (rawLets.length === 0) return badRequest(reply, 'Nothing to create — add at least one tenant.');
+
+    const created: Array<{ id: string; reference: string; tenantName: string; roomNumber: string }> = [];
+    const today = new Date();
+    const todayIso = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    for (const raw of rawLets) {
+      if (typeof raw !== 'object' || raw === null) continue;
+      const let_ = raw as Record<string, unknown>;
+      const roomId = typeof let_['roomId'] === 'string' ? let_['roomId'] : '';
+      const fullName = typeof let_['tenantName'] === 'string' ? let_['tenantName'].trim() : '';
+      if (roomId === '' || fullName === '') continue;
+
+      const room = backOffice.getRoom(roomId);
+      if (room === null) continue;
+      const property = backOffice.getProperty(room.propertyId);
+      if (property === null) continue;
+
+      const email = typeof let_['tenantEmail'] === 'string' ? let_['tenantEmail'].trim() : '';
+      const startDate = typeof let_['startDate'] === 'string' && let_['startDate'] !== '' ? let_['startDate'] : todayIso;
+
+      const tenant = backOffice.createTenant({ fullName, email });
+      const person: Record<string, unknown> = { full_name: fullName };
+      if (email !== '') person['email'] = email;
+
+      const pack = store.createPack({ tenants: [person], 'tenancy.start_date': startDate });
+      store.linkPack(pack.id, {
+        landlordId: property.landlordId,
+        propertyId: property.id,
+        roomId: room.id,
+        tenantId: tenant.id,
+        lifecycle: startDate > todayIso ? 'upcoming' : 'active',
+      });
+
+      const linked = store.getPack(pack.id);
+      created.push({
+        id: linked.id,
+        reference: linked.reference,
+        tenantName: fullName,
+        roomNumber: room.roomNumber,
+      });
+    }
+
+    if (created.length === 0) return badRequest(reply, 'Nothing to create — each row needs a room and a tenant name.');
+    return reply.code(201).send({ created, packs: created.length });
   });
 
   // --- packs --------------------------------------------------------------

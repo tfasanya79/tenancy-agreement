@@ -348,6 +348,104 @@ describe('documents', () => {
   });
 });
 
+describe('letting several rooms at once', () => {
+  it('creates one pack per tenant, each linked to its own room', async () => {
+    const landlord = (
+      await app.inject({ method: 'POST', url: '/api/backoffice/landlords', payload: { name: 'Priya Raman', address: '4 Oak Lane' } })
+    ).json();
+    const property = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/backoffice/properties',
+        payload: { landlordId: landlord.id, addressLine1: '14 Beech Road', postcode: 'E17 3NU' },
+      })
+    ).json();
+    const roomA = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/backoffice/rooms',
+        payload: { propertyId: property.id, roomNumber: 'Room 1', rentAmount: 1300 },
+      })
+    ).json();
+    const roomB = (
+      await app.inject({
+        method: 'POST',
+        url: '/api/backoffice/rooms',
+        payload: { propertyId: property.id, roomNumber: 'Room 2', rentAmount: 1450 },
+      })
+    ).json();
+
+    const response = await app.inject({
+      method: 'POST',
+      url: '/api/packs/bulk',
+      payload: {
+        lets: [
+          { roomId: roomA.id, tenantName: 'Alex Morgan', tenantEmail: 'alex@example.com', startDate: '2026-11-01' },
+          { roomId: roomB.id, tenantName: 'Sam Okafor', tenantEmail: 'sam@example.com', startDate: '2025-06-01' },
+        ],
+      },
+    });
+
+    assert.equal(response.statusCode, 201);
+    const body = response.json();
+    assert.equal(body.packs, 2);
+
+    // Each tenancy is its own record, linked to its own room and tenant.
+    for (const created of body.created) {
+      const detail = (await app.inject({ method: 'GET', url: `/api/packs/${created.id}` })).json();
+      assert.notEqual(detail.pack.roomId, null);
+      assert.notEqual(detail.pack.tenantId, null);
+      assert.equal(detail.fields['property.address_line1'], '14 Beech Road', 'the property is inherited');
+      assert.ok(
+        ['Room 1', 'Room 2'].includes(detail.fields['property.room_number']),
+        'each pack carries its own room',
+      );
+    }
+
+    // A start date in the past means it has already begun.
+    const byName = new Map(body.created.map((item: { tenantName: string; id: string }) => [item.tenantName, item.id]));
+    const alex = (await app.inject({ method: 'GET', url: `/api/packs/${byName.get('Alex Morgan')}` })).json();
+    const sam = (await app.inject({ method: 'GET', url: `/api/packs/${byName.get('Sam Okafor')}` })).json();
+    assert.equal(alex.pack.lifecycle, 'upcoming');
+    assert.equal(sam.pack.lifecycle, 'active');
+  });
+
+  it('ignores a row with no room or no name, and refuses an empty request', async () => {
+    const empty = await app.inject({ method: 'POST', url: '/api/packs/bulk', payload: { lets: [] } });
+    assert.equal(empty.statusCode, 400);
+
+    const junk = await app.inject({
+      method: 'POST',
+      url: '/api/packs/bulk',
+      payload: { lets: [{ roomId: '', tenantName: 'Nobody' }] },
+    });
+    assert.equal(junk.statusCode, 400);
+  });
+});
+
+describe('backup and health', () => {
+  it('downloads one zip with the database inside', async () => {
+    await createPack();
+    const response = await app.inject({ method: 'GET', url: '/api/backup' });
+
+    assert.equal(response.statusCode, 200);
+    assert.match(response.headers['content-type'] as string, /application\/zip/);
+    assert.equal(response.rawPayload.subarray(0, 2).toString('latin1'), 'PK');
+
+    const names = [...readZip(response.rawPayload).keys()];
+    assert.ok(names.includes('tenancydesk.db'));
+    assert.ok(names.includes('README - how to restore.txt'));
+  });
+
+  it('reports its own health, including what is on disk', async () => {
+    const body = (await app.inject({ method: 'GET', url: '/api/health' })).json();
+    assert.equal(body.ok, true);
+    assert.ok(typeof body.node === 'string');
+    assert.equal(typeof body.disk.databaseBytes, 'number');
+    assert.equal(typeof body.backOffice.properties, 'number');
+  });
+});
+
 describe('assistant endpoint', () => {
   it('explains itself when no API key is configured', async () => {
     const pack = await createPack();

@@ -413,7 +413,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     241 tests
+├── tests/                     248 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -430,7 +430,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 241 tests |
+| `pnpm test` | Run the 248 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm sample` | Rebuild `samples/` from the templates |
@@ -528,7 +528,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 241 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 248 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
@@ -538,6 +538,8 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | Tenancy lifecycle | ✅ upcoming, active, ending, ended — the pack list is grouped by it |
 | Shared values warn before they change | ✅ editing a room's rent says how many tenancies inherit it and asks first |
 | What's due, across every tenancy | ✅ a dashboard sorted by urgency, plus one-click .ics export into their calendar |
+| Let several rooms at once | ✅ one form, one pack per tenant, each with its own room and documents |
+| Backup and health | ✅ one click downloads the database, every document and every upload, with restore instructions |
 | Agency settings | ✅ edit your details in the app instead of a config file |
 | Agreement audit — is an uploaded document still current? | ✅ flags assured shorthold, section 21, fixed terms and vague rent reviews |
 | Proofreading a document for internal contradictions | ✅ a weekday that does not match its date, two different rent due days, a fixed late-payment fee, a mistyped ordinal |
@@ -563,7 +565,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 241 tests
+pnpm test        # 248 tests
 pnpm typecheck
 ```
 
