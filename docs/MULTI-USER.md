@@ -13,7 +13,8 @@ is added, and what the app can and cannot tell you afterwards.
 | **Landlord** | Read their own properties' tenancies, open a pack, download documents and the ZIP, read the history | Change anything, generate anything, see another landlord's records, or reach the assistant, checks or back office |
 
 One agency per installation. Several agencies sharing one copy would need every
-table and query scoped by agency — a different design, not a setting.
+table and query scoped by agency — a different design, not a setting. That design is
+written up, unbuilt, in [docs/PLATFORM.md](PLATFORM.md).
 
 ## The first run
 

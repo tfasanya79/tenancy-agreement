@@ -19,6 +19,24 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Added — a platform design, deliberately not built
+
+`docs/PLATFORM.md` sets out how this becomes a platform many agencies share, on the
+strength of two decisions:
+
+- **One database per organisation**, with a small control database holding only
+  identities, memberships and plans. The existing `Store` already takes a data
+  directory, so the isolation is a file boundary rather than a query discipline: a
+  forgotten filter cannot reach another agency's tenant because that tenant is not in
+  that file. (This corrects the shared-table design sketched in conversation — writing
+  it down showed the file boundary is both safer and less work.)
+- **No tenant accounts.** One capability link per tenancy, tokened in the URL fragment
+  and stored only as a hash, opening a whitelisted read-only view — with the delivery
+  record (issued, opened, when) shown where the agent already looks.
+
+It also fixes what the platform will never do — protect a deposit, check right to rent,
+sign a deed, move money, introduce tenants for a fee — and why each of those is a legal
+boundary rather than a backlog item.
 ### Added — accounts, roles, and the record of who did what
 
 The app treated every request as "the agent". A single shared password was the
