@@ -98,13 +98,13 @@ reported at upload time. A demo pack renders from the documents in
 
 *You already compute the dates; nobody is told about them.*
 
-- [ ] Export the pack's deadlines as an `.ics` file — imports into Outlook, Google or
+- [x] Export the pack's deadlines as an `.ics` file — imports into Outlook, Google or
       Apple Calendar with one click.
-- [ ] Include the renewal dates that are not yet due (gas safety +12 months, EICR +5 years)
+- [x] Include the renewal dates that are not yet due (gas safety +12 months, EICR +5 years)
       so a year's diary fills in at once.
-- [ ] A **cross-pack view**: every tenancy, sorted by what is due. Deposits not yet
+- [x] A **cross-pack view**: every tenancy, sorted by what is due. Deposits not yet
       protected, written statements due, deposits to return.
-- [ ] Surface the same information on the pack list in the sidebar (a count of overdue items).
+- [x] Surface the same information on the pack list in the sidebar (a count of overdue items).
 
 **Done when:** opening the app answers "what do I have to do this week?" without clicking
 into a single pack, and one button puts those dates in the agent's calendar.

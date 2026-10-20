@@ -16,6 +16,8 @@ export type PackSummaryView = {
   propertyAddress: string;
   status: Pack['status'];
   lifecycle: Pack['lifecycle'];
+  /** Statutory dates falling in the next 30 days. */
+  dueSoon: number;
   documentCount: number;
   errorCount: number;
   warningCount: number;
@@ -28,6 +30,17 @@ export function packSummaryView(pack: Pack, store: Store, fields?: Record<string
   const documents = store.listDocuments(pack.id);
   const effective = fields ?? pack.fields;
   const readiness = assessPack(effective);
+
+  // How many statutory dates fall inside the next month, for the sidebar.
+  const now = new Date();
+  const today = Date.UTC(now.getFullYear(), now.getMonth(), now.getDate());
+  const dueSoon = readiness.compliance.deadlines.filter((deadline) => {
+    const [year, month, day] = deadline.date.split('-').map(Number);
+    if (year === undefined || month === undefined || day === undefined) return false;
+    const days = Math.round((Date.UTC(year, month - 1, day) - today) / 86_400_000);
+    return days >= 0 && days <= 30;
+  }).length;
+
   return {
     id: pack.id,
     reference: pack.reference,
@@ -36,6 +49,7 @@ export function packSummaryView(pack: Pack, store: Store, fields?: Record<string
     propertyAddress: propertyAddressFrom(effective) || pack.propertyAddress,
     status: pack.status,
     lifecycle: pack.lifecycle,
+    dueSoon,
     documentCount: documents.length,
     errorCount: readiness.compliance.counts.error,
     warningCount: readiness.compliance.counts.warning,

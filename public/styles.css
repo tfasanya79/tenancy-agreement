@@ -693,3 +693,19 @@ select.bo-inline { width: auto; }
   background: #fff;
 }
 input[type="file"] { font-size: .82rem; }
+/* --- what's due ------------------------------------------------------------ */
+
+.due-row {
+  display: flex; align-items: center; gap: .8rem;
+  padding: .55rem 0;
+  border-top: 1px solid var(--line);
+}
+.due-row:first-of-type { border-top: 0; }
+.due-when {
+  flex: 0 0 96px;
+  display: flex; flex-direction: column;
+  font-variant-numeric: tabular-nums;
+}
+.due-when strong { font-size: .84rem; }
+.due-what { flex: 1; min-width: 0; display: flex; flex-direction: column; }
+.due-what strong { font-size: .87rem; }

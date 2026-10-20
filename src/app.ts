@@ -28,6 +28,8 @@ import { buildPackSummaryText, packSummaryView } from './docs/packSummary.ts';
 import { BackOffice } from './backoffice/entities.ts';
 import { contextFor, effectiveFields } from './backoffice/context.ts';
 import { applyMigration, previewMigration } from './backoffice/migrate.ts';
+import { aggregateDue } from './backoffice/due.ts';
+import { buildCalendar } from './util/ics.ts';
 import { CustomTemplateStore } from './backoffice/customTemplates.ts';
 import { buildReplacements, extractDocxText, fillDocx, fillDocxBlanks, formatLike, resolveFieldPath } from './docs/docxFill.ts';
 import { proposeLinks } from './docs/linkProposal.ts';
@@ -501,6 +503,54 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     ]);
 
     return { document: saved, report, pack: packDetail(store.getPack(pack.id)) };
+  });
+
+  // --- what is due ---------------------------------------------------------
+
+  app.get('/api/due', async () => {
+    const report = aggregateDue(store, backOffice);
+    return { ...report, generatedAt: new Date().toISOString() };
+  });
+
+  /** Every deadline, as a calendar the agency can subscribe to once. */
+  app.get('/api/calendar.ics', async (_request, reply) => {
+    const report = aggregateDue(store, backOffice);
+    const calendar = buildCalendar(
+      report.items.map((item) => ({
+        uid: `${item.packId}-${item.kind}-${item.date}`,
+        date: item.date,
+        title: `${item.label} — ${item.tenantName === '' ? item.reference : item.tenantName}`,
+        description: `${item.detail} ${item.propertyAddress}`.trim(),
+      })),
+      { name: 'Tenancy deadlines' },
+    );
+    return reply
+      .code(200)
+      .header('Content-Type', 'text/calendar; charset=utf-8')
+      .header('Content-Disposition', 'attachment; filename="tenancy-deadlines.ics"')
+      .send(calendar);
+  });
+
+  /** One pack's deadlines. */
+  app.get('/api/packs/:id/calendar.ics', async (request, reply) => {
+    const pack = store.findPack(paramId(request));
+    if (pack === null) return notFound(reply, 'That pack no longer exists.');
+
+    const mine = aggregateDue(store, backOffice).items.filter((item) => item.packId === pack.id);
+    const calendar = buildCalendar(
+      mine.map((item) => ({
+        uid: `${item.packId}-${item.kind}-${item.date}`,
+        date: item.date,
+        title: item.label,
+        description: `${item.detail} ${pack.reference}`.trim(),
+      })),
+      { name: `${pack.reference} deadlines` },
+    );
+    return reply
+      .code(200)
+      .header('Content-Type', 'text/calendar; charset=utf-8')
+      .header('Content-Disposition', `attachment; filename="${pack.reference}-deadlines.ics"`)
+      .send(calendar);
   });
 
   // --- packs --------------------------------------------------------------

@@ -498,3 +498,16 @@ everywhere else. The body limit is 16 MB.
 
 A link whose `field` is empty is a value the app would not guess. It is stored so the
 agent can come back to it, and it is skipped when filling.
+---
+
+## What's due, and the calendar
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/api/due` | Every statutory date across every live tenancy, sorted, with `daysUntil` per item and totals for `overdue` and `soon` |
+| `GET` | `/api/calendar.ics` | The same dates as an iCalendar file, for Outlook, Google or Apple Calendar |
+| `GET` | `/api/packs/:id/calendar.ics` | One tenancy's dates |
+
+Ended tenancies are excluded — their dates no longer need chasing. Each event is
+all-day, carries a stable UID (so re-importing updates rather than duplicates), and
+has a reminder the day before.

@@ -8,6 +8,26 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — M3: what's due, and a calendar
+
+The app computed statutory dates per pack, but nobody was told about them. Now:
+
+- **A "What's due" screen**: every deadline across every live tenancy, grouped into
+  Overdue, Next 7 days, Next 30 days and Later, each one opening the pack. Ended
+  tenancies are left out — their dates no longer need chasing.
+- **One-click `.ics` export**, for the whole portfolio or a single tenancy. All-day
+  events with a stable UID (so a re-import updates rather than duplicates) and a
+  reminder the day before. No email infrastructure, no cron: it lands in the calendar
+  they already look at.
+- **A count on the sidebar**: each pack shows `N due` when a statutory date falls
+  inside the next month, so the list itself says where to look.
+
+Verified live: nine dates across two tenancies, three inside 30 days, exported as a
+valid 9-event calendar.
+
+241 tests, including `due.test.ts` for the aggregation and the calendar format.
+
+
 ### Added — M2: use their own documents
 
 Upload a `.docx` and the app fills it for each tenant, in their own layout. The

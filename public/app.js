@@ -189,6 +189,10 @@ function renderSidebar() {
     if (pack.documentCount > 0) {
       meta.push(el('span', { class: 'badge' }, `${pack.documentCount} doc${pack.documentCount === 1 ? '' : 's'}`));
     }
+    // A statutory date inside the next month is worth seeing from the list.
+    if (pack.dueSoon > 0) {
+      meta.push(el('span', { class: 'badge badge-warn' }, `${pack.dueSoon} due`));
+    }
 
     return el(
       'li',
@@ -293,6 +297,13 @@ function renderMain() {
 
   if (state.view === 'backoffice') {
     renderBackOffice(main);
+    return;
+  }
+
+  if (state.view === 'due') {
+    void renderDue(main).catch((error) => {
+      main.replaceChildren(el('div', { class: 'notice notice-err' }, error.message));
+    });
     return;
   }
 
@@ -1482,6 +1493,94 @@ function renderChecks() {
   );
 }
 
+async function renderDue(main) {
+  const data = await api('/api/due');
+
+  const buckets = [
+    ['Overdue', (item) => item.daysUntil < 0],
+    ['Next 7 days', (item) => item.daysUntil >= 0 && item.daysUntil <= 7],
+    ['Next 30 days', (item) => item.daysUntil > 7 && item.daysUntil <= 30],
+    ['Later', (item) => item.daysUntil > 30],
+  ];
+
+  const row = (item) =>
+    el(
+      'div',
+      { class: 'due-row' },
+      el(
+        'div',
+        { class: 'due-when' },
+        el('strong', {}, fmtDate(item.date)),
+        el(
+          'span',
+          { class: 'small' },
+          item.daysUntil < 0 ? `${Math.abs(item.daysUntil)} days ago` : item.daysUntil === 0 ? 'today' : `in ${item.daysUntil} days`,
+        ),
+      ),
+      el(
+        'div',
+        { class: 'due-what' },
+        el('strong', {}, item.label),
+        el('span', { class: 'small' }, `${item.tenantName === '' ? item.reference : item.tenantName} · ${item.propertyAddress}`),
+      ),
+      el(
+        'button',
+        {
+          class: 'btn btn-sm btn-ghost',
+          type: 'button',
+          onClick: async () => {
+            state.view = 'tenancy';
+            await selectPack(item.packId);
+          },
+        },
+        'Open',
+      ),
+    );
+
+  const sections = buckets
+    .map(([title, test]) => {
+      const items = data.items.filter(test);
+      if (items.length === 0) return null;
+      return el(
+        'div',
+        { class: 'bo-section' },
+        el('h3', {}, `${title} · ${items.length}`),
+        el('div', {}, ...items.map(row)),
+      );
+    })
+    .filter(Boolean);
+
+  main.replaceChildren(
+    el(
+      'div',
+      { class: 'pack-head' },
+      el(
+        'div',
+        { class: 'pack-title' },
+        el('h2', {}, 'What’s due'),
+        el(
+          'div',
+          { class: 'pack-where' },
+          `${data.overdue} past their date · ${data.soon} in the next 30 days · ${data.items.length} in total`,
+        ),
+      ),
+      el(
+        'div',
+        { class: 'pack-actions' },
+        el('a', { class: 'btn btn-primary', href: '/api/calendar.ics' }, 'Add to calendar'),
+        el(
+          'button',
+          { class: 'btn', type: 'button', onClick: () => { state.view = 'tenancy'; renderMain(); } },
+          'Back to tenancies',
+        ),
+      ),
+    ),
+    sections.length === 0
+      ? el('div', { class: 'notice notice-info' }, 'Nothing due. Every tenancy is up to date.')
+      : el('div', { class: 'bo-grid' }, ...sections),
+  );
+}
+
 /* ----------------------------------------------------------- back office --- */
 
 /**
@@ -2358,6 +2457,11 @@ function renderMigrationSection(data) {  if (data.unlinked.length === 0) {
 $('#new-pack').addEventListener('click', () => {
   state.view = 'tenancy';
   void createPack();
+});
+
+$('#due').addEventListener('click', () => {
+  state.view = 'due';
+  renderMain();
 });
 
 $('#back-office').addEventListener('click', () => {
