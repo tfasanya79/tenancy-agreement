@@ -487,6 +487,34 @@ sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
 sudo systemctl reload caddy
 ```
 
+**Once the app has accounts, the proxy password can go.** That is the deployment
+this project runs: Caddy terminates TLS and logs requests, and the sign-in screen is
+the door. One login per person is safer than one password per group, and it is the
+only arrangement in which "who changed this" has an answer.
+
+```
+tenancy.example.co.uk {
+	encode zstd gzip
+	log {
+		output file /var/log/caddy/tenancy-access.log {
+			roll_size 10MiB
+			roll_keep 10
+		}
+		format json
+	}
+	reverse_proxy 127.0.0.1:8111 {
+		flush_interval -1
+	}
+}
+```
+
+Keep the proxy password instead if you want two doors — it costs a second sign-in on
+every device. What you must not do is keep it *instead of* accounts and share it
+around: that was the arrangement this replaces.
+
+Note the window before the first account exists: `/api/auth/setup` is open until
+somebody claims the installation, so create the owner account as soon as the site
+answers. If you are not ready, leave the proxy password in place until you are.
 If the validate step fails on a block you did not write (an `{env.*}` placeholder,
 say), check the running service's own `EnvironmentFile` — Caddy resolves those at
 `run` time, and the offline checker does not. A reload that fails leaves the

@@ -8,6 +8,17 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Changed — one door, not two
+
+The Caddy site block lost its shared password. With accounts, roles and an audit
+trail inside the app, a second password in front of it was a shared secret protecting
+per-person logins: the arrangement that makes a WhatsApp group seem reasonable.
+TLS stays, request logging stays, and each person signs in as themselves.
+
+Proxy access logs no longer carry a `user_id` (there is no longer a proxy
+credential to name), so attribution lives in the app's own trail — which is more
+precise anyway, because it records the field that changed rather than the URL that
+was requested.
 ### Added — accounts, roles, and the record of who did what
 
 The app treated every request as "the agent". A single shared password was the
