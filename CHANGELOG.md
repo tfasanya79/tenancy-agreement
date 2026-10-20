@@ -8,6 +8,28 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Fixed — asking for a draft gave you a receipt, not a draft
+
+Clicking *Draft the covering email and a short WhatsApp message* answered "the
+covering email and WhatsApp message are saved to the pack", then two things to fix.
+The agent could not read the message it had asked for.
+
+Two causes, both fixed:
+
+- **The instructions never said the reply *is* the draft.** They now do: write the
+  email with a Subject line and the body, write the WhatsApp message short and
+  human, save both, and never answer with only "saved to the pack". Any caveat comes
+  after the drafts in one sentence, not as a numbered list of problems.
+- **The saved message was displayed nowhere.** It existed on the pack and inside the
+  zip's summary sheet, and nowhere in the interface. There is now a **Message to the
+  tenant** panel at the top of the Documents tab, with a Copy button for each
+  version.
+
+Verified live: the reply now carries a full email (subject, greeting, dates, rent,
+deposit, sign-off) and a short WhatsApp message, with one closing line about the
+deposit deadline.
+
+
 ### Added — M5: evidence, explanations and a tenant summary
 
 - **A History tab** per tenancy: every document, note, assistant run and saved

@@ -1221,6 +1221,7 @@ function renderDocuments() {
   return el(
     'div',
     {},
+    coverMessagePanel(pack),
     el(
       'div',
       { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' } },
@@ -1238,6 +1239,62 @@ function renderDocuments() {
     el('div', { class: 'doc-grid mt' }, ...cards),
     el('div', { class: 'form-actions' }, el('span', { class: 'small' }, `${state.selection.size} selected`), generateButton),
     customSection(pack),
+  );
+}
+
+/**
+ * The message to the tenant, if the assistant has drafted one — readable and
+ * copyable. The agent asked for words to send; they should never have to dig them
+ * out of a zip.
+ */
+function coverMessagePanel(pack) {
+  const message = pack?.coverMessage;
+  if (message === null || message === undefined) return null;
+
+  const block = (label, text) => {
+    if (typeof text !== 'string' || text.trim() === '') return null;
+    return el(
+      'div',
+      { class: 'cover-block' },
+      el(
+        'div',
+        { class: 'cover-head' },
+        el('strong', {}, label),
+        el(
+          'button',
+          {
+            class: 'btn btn-sm btn-ghost',
+            type: 'button',
+            onClick: async () => {
+              try {
+                await navigator.clipboard.writeText(text);
+                toast(`${label} copied.`);
+              } catch {
+                toast('Select the text and copy it by hand.', true);
+              }
+            },
+          },
+          'Copy',
+        ),
+      ),
+      el('pre', { class: 'cover-text' }, text),
+    );
+  };
+
+  const blocks = [block('Email to the tenant', message.email), block('WhatsApp', message.whatsapp)].filter(Boolean);
+  if (blocks.length === 0) return null;
+
+  return el(
+    'div',
+    {},
+    el(
+      'div',
+      { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' } },
+      el('h3', { style: { fontSize: '.95rem' } }, 'Message to the tenant'),
+      el('span', { class: 'small' }, 'Drafted for this pack — copy it, or ask the assistant to change it'),
+    ),
+    el('div', { class: 'mt' }, ...blocks),
+    el('hr', { class: 'sep' }),
   );
 }
 

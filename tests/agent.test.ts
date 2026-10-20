@@ -345,5 +345,8 @@ describe('system prompt', () => {
     assert.match(prompt, /section 21 are gone|section 21/);
     assert.match(prompt, /tenancy\.rent_amount/);
     assert.match(prompt, /test-agreement/);
+    // Drafting is a deliverable, not a receipt. The agent must be able to read the words.
+    assert.match(prompt, /the reply is the draft/);
+    assert.match(prompt, /Never answer with only/);
   });
 });
