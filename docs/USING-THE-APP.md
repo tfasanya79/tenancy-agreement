@@ -64,7 +64,7 @@ deposit amount?"* Just reply in the box.
 2. Go to the **Details** tab.
 3. Fill in the sections. The three that matter most are open by default: tenants,
    property, tenancy.
-4. Details marked with a red asterisk are essential — the app will still generate without them, but it will ask you first
+4. Details marked **needed** are the ones the agreement asks for — the app will still generate without them, but it will ask you first
    documents without them.
 
 It saves as you type. There is a **Save details** button at the bottom if you
@@ -147,7 +147,7 @@ is replaced, not duplicated.
 
 Three groups, in this order of seriousness:
 
-- **Must be fixed before you generate** — the app still lets you generate; it asks first and records that you chose to carry on. A deposit over
+- **Worth fixing before you send** — the app still lets you generate; it asks first and records that you chose to carry on. A deposit over
   the legal cap, a gas certificate that will be out of date, an EPC rated F.
 - **Worth checking** — usually fine. A missing right-to-rent check date, an
   agency redress scheme not filled in.
@@ -223,7 +223,7 @@ The things that fill those gaps — mostly free or cheap — are listed in
 | *"DeepSeek rejected the API key"* | The key is wrong or expired. Make a new one at platform.deepseek.com. |
 | *"Your DeepSeek account has no remaining balance"* | Top up the account, or fill packs in by hand meanwhile. |
 | Assistant says it cannot reach DeepSeek | No internet, or a company firewall. Check you can open platform.deepseek.com. |
-| A field in a Word document is blank | That detail was never entered. Details tab → look for the red asterisks. |
+| A field in a Word document is blank | That detail was never entered. On the Details tab, fields the agreement asks for are marked **needed**. |
 | The app asks before generating | Something is outstanding. You can fix it, or choose **Carry on and generate** — the pack is produced and the choice is noted on the pack. |
 | Print / PDF did nothing | Allow pop-ups for this site, then try again. |
 | Something is badly broken | Close it and run `pnpm doctor` in the folder — it checks everything and says what to fix. |

@@ -173,7 +173,7 @@ The whole app is one screen: a list of packs on the left, four tabs on the right
    Lane Leeds."*
    You will see each step it takes, in plain English, as it takes it.
 3. **Details tab** — every detail it collected, in a form you can correct. Anything
-   essential that is still blank is marked with a red asterisk.
+   the agreement needs that is still blank is marked **needed**, quietly rather than with an alarm.
 4. **Checks tab** — errors that block you, warnings worth a look, and the statutory
    deadlines with a countdown.
 5. **Documents tab** — tick what you want (the move-in set is pre-ticked), press

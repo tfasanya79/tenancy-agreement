@@ -33,7 +33,7 @@ export type ComplianceReport = {
   findings: Finding[];
   deadlines: Deadline[];
   counts: { error: number; warning: number; info: number };
-  /** True when there is nothing that must be fixed. */
+  /** True when nothing is outstanding. */
   ok: boolean;
 };
 
@@ -149,7 +149,7 @@ export function runComplianceChecks(
           id: 'missing-tenants',
           severity: 'error',
           title: 'No tenant named',
-          detail: 'At least one tenant must be named before a tenancy agreement can be produced.',
+          detail: 'The agreement needs at least one named tenant.',
           fields: ['tenants'],
         });
       }
@@ -269,7 +269,7 @@ export function runComplianceChecks(
         id: 'gas-safety-missing',
         severity: 'info',
         title: 'No gas safety certificate recorded',
-        detail: 'A gas safety check must be done before the tenant moves in, and the record given to them.',
+        detail: 'A gas safety check is normally done before the tenant moves in, and the record given to them.',
         fields: ['safety.gas_safety_date'],
         ruleId: 'gas-safety',
       });
@@ -288,7 +288,7 @@ export function runComplianceChecks(
           id: 'gas-safety-after-start',
           severity: 'info',
           title: 'Gas safety check is dated after the tenancy starts',
-          detail: 'The tenant must have the certificate before they move in. Check the dates.',
+          detail: 'The tenant normally has the certificate before they move in. Worth checking the dates.',
           fields: ['safety.gas_safety_date'],
           ruleId: 'gas-safety',
         });
@@ -354,7 +354,7 @@ export function runComplianceChecks(
       id: 'epc-missing',
       severity: 'info',
       title: 'No EPC rating recorded',
-      detail: 'A valid EPC is required, and a copy must be given to the tenant before they move in.',
+      detail: 'A valid EPC is needed, and a copy is normally given to the tenant before they move in.',
       fields: ['property.epc_rating'],
       ruleId: 'epc',
     });
@@ -396,7 +396,7 @@ export function runComplianceChecks(
       id: 'alarms-missing',
       severity: 'info',
       title: 'Alarm test not recorded',
-      detail: 'Smoke alarms on every storey and carbon monoxide alarms where needed must be tested on the day the tenancy starts.',
+      detail: 'Smoke alarms on every storey, and carbon monoxide alarms where needed, are normally tested on the day the tenancy starts.',
       fields: ['safety.smoke_alarms'],
       ruleId: 'alarms',
     });
@@ -408,7 +408,7 @@ export function runComplianceChecks(
       id: 'agency-schemes',
       severity: 'warning',
       title: 'Client money protection or redress scheme missing',
-      detail: 'Your agency’s scheme membership must appear on the paperwork. Set these once in your settings.',
+      detail: 'Your agency’s scheme membership normally appears on the paperwork. Set these once in your settings.',
       fields: ['agent.client_money_scheme', 'agent.redress_scheme'],
       ruleId: 'client-money',
     });

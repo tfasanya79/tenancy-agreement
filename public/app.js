@@ -699,8 +699,8 @@ function renderDetails() {
     el('strong', {}, `${filled} of ${state.fields.length}`),
     ' details filled in' +
       (readiness.missingCore.length > 0
-        ? ` · ${readiness.missingCore.length} essential${readiness.missingCore.length === 1 ? '' : 's'} still missing`
-        : ' · everything essential is here') +
+        ? ` · ${readiness.missingCore.length} still needed for the agreement`
+        : ' · nothing outstanding') +
       (inheritedCount > 0 ? ` · ${inheritedCount} pre-filled for you` : ''),
   );
 
@@ -791,7 +791,7 @@ function renderField(field, values, provenance) {
     'label',
     { for: `field-${field.key}` },
     field.label,
-    field.core === true ? el('span', { class: 'is-missing' }, ' *') : null,
+    field.core === true ? el('span', { class: 'field-need' }, 'needed') : null,
     provenanceBadge(source),
   );
 
@@ -827,7 +827,7 @@ function renderField(field, values, provenance) {
     input = el('input', { ...common, type: 'text', value: String(value), placeholder: field.placeholder || '' });
   }
 
-  if (missing) input.classList.add('is-required-empty');
+  if (missing) input.classList.add('is-outstanding');
   if (inherited) input.classList.add('is-inherited');
 
   return el(
@@ -909,7 +909,7 @@ function renderPeopleField(field, values) {
   return el(
     'div',
     { class: 'field' },
-    el('label', {}, field.label, field.core === true ? el('span', { class: 'is-missing' }, ' *') : null),
+    el('label', {}, field.label, field.core === true ? el('span', { class: 'field-need' }, 'needed') : null),
     field.help ? el('span', { class: 'help' }, field.help) : null,
     container,
     el(
@@ -995,8 +995,8 @@ async function saveFields(announce) {
         el('strong', {}, `${filled} of ${state.fields.length}`),
         ' details filled in' +
           (readiness.missingCore.length > 0
-            ? ` · ${readiness.missingCore.length} essential${readiness.missingCore.length === 1 ? '' : 's'} still missing`
-            : ' · everything essential is here'),
+            ? ` · ${readiness.missingCore.length} still needed for the agreement`
+            : ' · nothing outstanding'),
       );
     }
 
@@ -1357,9 +1357,9 @@ function renderChecks() {
       ),
     ),
     summary,
-    group('error', 'Must be fixed before you generate'),
-    group('warning', 'Worth checking'),
-    group('info', 'For your information'),
+    group('error', 'Worth fixing before you send'),
+    group('warning', 'Worth a look'),
+    group('info', 'Background notes'),
     deadlineNodes,
     notes,
     el(

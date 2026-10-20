@@ -382,7 +382,10 @@ button { font: inherit; }
 .field { display: flex; flex-direction: column; gap: .25rem; margin-top: .75rem; }
 .field label { font-size: .8rem; font-weight: 500; color: var(--ink-soft); }
 .field .help { font-size: .74rem; color: var(--muted); }
-.field .is-missing { color: var(--danger); }
+.field .field-need {
+  color: var(--muted);
+}
+.field .field-need::before { content: '· '; }
 
 input[type="text"], input[type="date"], input[type="number"], select, textarea {
   font: inherit;
@@ -398,7 +401,11 @@ input:focus, select:focus, textarea:focus {
   outline: 2px solid var(--accent-soft);
   border-color: var(--accent);
 }
-input.is-required-empty { border-color: #d9a99f; background: #fffaf9; }
+input.is-outstanding, select.is-outstanding, textarea.is-outstanding {
+  border-style: dashed;
+  border-color: var(--line-strong);
+  background: #fdfdfc;
+}
 textarea { min-height: 68px; resize: vertical; }
 
 .money-input { display: flex; align-items: center; gap: 0; }
