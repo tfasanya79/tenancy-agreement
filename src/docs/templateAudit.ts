@@ -13,6 +13,7 @@
 
 export type AuditSeverity = 'error' | 'warning' | 'info';
 
+import { ordinal } from './template.ts';
 export type AuditFinding = {
   id: string;
   severity: AuditSeverity;
@@ -157,6 +158,108 @@ function excerptAround(text: string, matchIndex: number, matchLength: number, ra
   return `${start > 0 ? '…' : ''}${fragment}${end < text.length ? '…' : ''}`;
 }
 
+const MONTH_NAMES = [
+  'January', 'February', 'March', 'April', 'May', 'June',
+  'July', 'August', 'September', 'October', 'November', 'December',
+] as const;
+
+const WEEKDAY_DATE =
+  /\b(Monday|Tuesday|Wednesday|Thursday|Friday|Saturday|Sunday)\s+(\d{1,2})(?:st|nd|rd|th)?\s+(January|February|March|April|May|June|July|August|September|October|November|December)\s+(\d{4})\b/g;
+
+/** "Wednesday 5th September 2026" — 5 September 2026 was a Saturday. */
+function checkWeekdays(text: string): AuditFinding[] {
+  const mismatches: string[] = [];
+
+  for (const match of text.matchAll(WEEKDAY_DATE)) {
+    const named = match[1] ?? '';
+    const day = Number(match[2]);
+    const monthIndex = MONTH_NAMES.indexOf((match[3] ?? '') as (typeof MONTH_NAMES)[number]);
+    const year = Number(match[4]);
+    if (monthIndex === -1 || !Number.isFinite(day) || !Number.isFinite(year)) continue;
+
+    const date = new Date(year, monthIndex, day);
+    if (Number.isNaN(date.getTime())) continue;
+    const actual = date.toLocaleDateString('en-GB', { weekday: 'long' });
+    if (actual !== named) mismatches.push(`“${match[0]}” — that date is a ${actual}`);
+  }
+
+  if (mismatches.length === 0) return [];
+  return [
+    {
+      id: 'weekday-mismatch',
+      severity: 'error',
+      title: 'A weekday does not match its date',
+      detail: `${mismatches.slice(0, 3).join('; ')}. A date that disagrees with its own weekday is exactly the detail a tenant or their adviser will pick up.`,
+      excerpt: mismatches[0],
+    },
+  ];
+}
+
+/** One document should not say rent is due on the 1st in one clause and the 4th in another. */
+function checkRentDueDays(text: string): AuditFinding[] {
+  const days = new Set<number>();
+  const samples: string[] = [];
+
+  for (const match of text.matchAll(/\bon the (\d{1,2})(?:st|nd|rd|th)/gi)) {
+    const index = match.index ?? 0;
+    const context = text.slice(Math.max(0, index - 160), Math.min(text.length, index + 90));
+    if (!/\brent\b/i.test(context)) continue;
+    // Skip worked examples such as "if rent is due on the 10th…".
+    if (/\bif\b/i.test(text.slice(Math.max(0, index - 70), index))) continue;
+
+    const day = Number(match[1]);
+    if (!Number.isFinite(day) || day < 1 || day > 31) continue;
+    if (!days.has(day)) samples.push(match[0]);
+    days.add(day);
+  }
+
+  if (days.size < 2) return [];
+  const listed = [...days].sort((a, b) => a - b).map((day) => ordinal(day)).join(', ');
+  return [
+    {
+      id: 'rent-due-inconsistent',
+      severity: 'warning',
+      title: 'The document gives more than one rent due date',
+      detail: `It refers to rent being due on the ${listed}. Decide which one applies and make every clause agree — this is the single most common cause of a late-payment dispute.`,
+      excerpt: samples.slice(0, 3).join(' / '),
+      ruleId: 'prohibited-payments',
+    },
+  ];
+}
+
+/** A flat "admin fee" for late rent is a prohibited payment. */
+function checkProhibitedFees(text: string): AuditFinding[] {
+  const match = /£\s?\d+(?:\.\d{2})?\s*(?:admin(?:istration)?|late\s*payment|late)\s*(?:fee|charge)/i.exec(text);
+  if (match === null) return [];
+  return [
+    {
+      id: 'prohibited-fee',
+      severity: 'error',
+      title: 'A fixed late-payment fee is probably a prohibited payment',
+      detail:
+        'Under the Tenant Fees Act 2019 a charge for late rent is limited to interest at 3% above the Bank of England base rate, and only once the rent is 14 days overdue. A flat fee of this kind must normally be repaid, and a council can fine for it. Replace it with the statutory interest calculation, or remove it.',
+      excerpt: excerptAround(text, match.index, match[0].length),
+      ruleId: 'prohibited-payments',
+    },
+  ];
+}
+
+/** "the 1stth of each month" */
+function checkOrdinalTypos(text: string): AuditFinding[] {
+  const match = /\b\d{1,2}(?:st|nd|rd|th)(?:st|nd|rd|th)\b/i.exec(text);
+  if (match === null) return [];
+  const suggested = match[0].replace(/(?:st|nd|rd|th)(?:st|nd|rd|th)$/i, (suffix) => suffix.slice(0, 2));
+  return [
+    {
+      id: 'ordinal-typo',
+      severity: 'info',
+      title: 'A date ordinal looks mistyped',
+      detail: `“${match[0]}” is probably meant to be “${suggested}”. A small typo in a signed document undermines trust in all of it.`,
+      excerpt: excerptAround(text, match.index, match[0].length),
+    },
+  ];
+}
+
 /**
  * Audit a document's text.
  * @param text plain text of the uploaded document
@@ -202,6 +305,14 @@ export function auditDocumentText(text: string): AuditReport {
       ...(pattern.ruleId === undefined ? {} : { ruleId: pattern.ruleId }),
     });
   }
+
+  // --- Internal consistency ------------------------------------------------
+  // These are the mistakes that survive every review: a weekday that does not
+  // match its date, or two different rent due days in the same document.
+  findings.push(...checkWeekdays(normalised));
+  findings.push(...checkRentDueDays(normalised));
+  findings.push(...checkProhibitedFees(normalised));
+  findings.push(...checkOrdinalTypos(normalised));
 
   // Absence checks only make sense for something that reads like a tenancy agreement.
   const looksLikeAgreement = looksLikeTenancyAgreement(normalised);

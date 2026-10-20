@@ -16,9 +16,9 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | HTTP surface | `src/app.ts` | Every route, in one file, in the order you would look for them |
 | Documents | `src/docs/` | Template loading, expansion, Markdown parsing, Word/HTML writing, checks |
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
-| Rules | `src/knowledge/rules.ts` | 18 curated England & Wales rules with sources |
+| Rules | `src/knowledge/rules.ts` | 20 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 187 tests on `node:test` |
+| Tests | `tests/` | 193 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 

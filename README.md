@@ -228,7 +228,7 @@ so a wrong value is visible rather than buried.
 
 **3. The legal advice comes from a curated rule set, not from memory.**
 When the assistant is unsure what the law requires it calls `lookup_rules`, which
-searches [`src/knowledge/rules.ts`](src/knowledge/rules.ts) — 18 rules, each with a
+searches [`src/knowledge/rules.ts`](src/knowledge/rules.ts) — 20 rules, each with a
 source. You can read the whole set in [docs/RULES.md](docs/RULES.md).
 
 **4. The checks are arithmetic, not opinions.**
@@ -408,7 +408,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     187 tests
+├── tests/                     193 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -425,7 +425,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 187 tests |
+| `pnpm test` | Run the 193 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm sample` | Rebuild `samples/` from the templates |
@@ -508,6 +508,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) | Developers — how it works and why |
 | [docs/API.md](docs/API.md) | Developers — the HTTP API |
 | [docs/DEPLOY.md](docs/DEPLOY.md) | Running it on a server, and backing it up |
+| [docs/ROADMAP.md](docs/ROADMAP.md) | What is being built next, in what order, and how we will know it is done |
 | [SECURITY.md](SECURITY.md) | Data handling and hardening |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Changing templates, rules or code |
 
@@ -519,12 +520,13 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 187 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 193 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
 | Room-by-room lettings | ✅ `property.room_number`, first payment date derived from the start date |
 | Agreement audit — is an uploaded document still current? | ✅ flags assured shorthold, section 21, fixed terms and vague rent reviews |
+| Proofreading a document for internal contradictions | ✅ a weekday that does not match its date, two different rent due days, a fixed late-payment fee, a mistyped ordinal |
 | Filling an agency's own `.docx` without losing its formatting | ✅ engine and tests; `pnpm demo:fill` shows it working |
 | Upload screen for a custom document | 🚧 next — engine and audit are ready, the interface is not wired up yet |
 | Accounts, multi-user | ✗ by design |
@@ -545,7 +547,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 187 tests
+pnpm test        # 193 tests
 pnpm typecheck
 ```
 

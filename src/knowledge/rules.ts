@@ -245,6 +245,41 @@ export const RULES: readonly Rule[] = [
     ],
     source: { label: 'GOV.UK — Client money protection schemes for property agents', url: 'https://www.gov.uk/government/publications/client-money-protection-schemes-for-property-agents' },
   },
+  {
+    id: 'prohibited-payments',
+    topic: 'fees',
+    title: 'Only permitted payments may be charged to a tenant',
+    summary:
+      'The Tenant Fees Act 2019 bans fees beyond the rent, a refundable deposit, a holding deposit and a short list of permitted payments.',
+    detail: [
+      'A charge for late rent is limited to interest at 3% above the Bank of England base rate, and only once the rent is 14 days overdue.',
+      'A flat “admin fee” for a late payment is a prohibited payment, however small the amount.',
+      'A prohibited payment must be repaid, and a council can impose a financial penalty — up to £5,000, and more for repeat breaches.',
+      'The other permitted payments are narrow: a lost key at reasonable cost, a variation the tenant asks for (capped at £50), and an early-termination payment where the tenant requests it.',
+    ],
+    source: {
+      label: 'GOV.UK — Tenant Fees Act 2019 guidance',
+      url: 'https://www.gov.uk/government/collections/tenant-fees-act',
+    },
+  },
+  {
+    id: 'holding-deposit',
+    topic: 'holding deposit',
+    title: 'A holding deposit is capped at one week’s rent and is refundable',
+    summary:
+      'A holding deposit may not exceed one week’s rent (annual rent ÷ 52), only one may be held at a time, and it must normally be refunded within 7 days.',
+    detail: [
+      'Give the applicant written terms before they pay: the amount, what it is for, when it is refundable, and the deadline for agreeing the tenancy.',
+      'The deadline for agreement is normally 15 days, extendable by written agreement.',
+      'Refund it within 7 days if the tenancy is not entered into, or if the landlord or agent decides not to proceed.',
+      'It may be retained only on the limited grounds in Schedule 2 — false or misleading information, a failed right to rent check, or the applicant withdrawing — and the reason must be given in writing within 7 days.',
+      'If the tenancy goes ahead, the holding deposit must be credited in full towards the rent or the deposit.',
+    ],
+    source: {
+      label: 'GOV.UK — Tenant Fees Act 2019 guidance',
+      url: 'https://www.gov.uk/government/collections/tenant-fees-act',
+    },
+  },
 ];
 
 /** Free-text search across the knowledge base, used by the agent's lookup tool. */

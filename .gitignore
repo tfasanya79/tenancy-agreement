@@ -32,3 +32,6 @@ tsconfig.tsbuildinfo
 
 # Client documents uploaded for analysis — never commit
 .incoming/
+
+# Documents received from the client — real personal data, never commit
+received from the client/

@@ -55,6 +55,8 @@ covers the Decent Homes Standard and Awaab’s Law, with timetables still being 
 | 16 | how to rent | [Give the tenant the How to Rent guide](#how-to-rent) |
 | 17 | landlord registration | [The PRS Database and Landlord Ombudsman are coming](#prs-database) |
 | 18 | agency compliance | [Agencies must display client money protection and redress scheme membership](#client-money) |
+| 19 | fees | [Only permitted payments may be charged to a tenant](#prohibited-payments) |
+| 20 | holding deposit | [A holding deposit is capped at one week’s rent and is refundable](#holding-deposit) |
 
 ---
 
@@ -331,6 +333,41 @@ If you hold client money — deposits or rent — you must belong to a governmen
 - Check your professional body’s rules for the exact wording.
 
 Source: [GOV.UK — Client money protection schemes for property agents](https://www.gov.uk/government/publications/client-money-protection-schemes-for-property-agents)
+
+---
+
+<a id="prohibited-payments"></a>
+
+### Only permitted payments may be charged to a tenant
+
+**Topic:** fees · **Rule id:** `prohibited-payments`
+
+The Tenant Fees Act 2019 bans fees beyond the rent, a refundable deposit, a holding deposit and a short list of permitted payments.
+
+- A charge for late rent is limited to interest at 3% above the Bank of England base rate, and only once the rent is 14 days overdue.
+- A flat “admin fee” for a late payment is a prohibited payment, however small the amount.
+- A prohibited payment must be repaid, and a council can impose a financial penalty — up to £5,000, and more for repeat breaches.
+- The other permitted payments are narrow: a lost key at reasonable cost, a variation the tenant asks for (capped at £50), and an early-termination payment where the tenant requests it.
+
+Source: [GOV.UK — Tenant Fees Act 2019 guidance](https://www.gov.uk/government/collections/tenant-fees-act)
+
+---
+
+<a id="holding-deposit"></a>
+
+### A holding deposit is capped at one week’s rent and is refundable
+
+**Topic:** holding deposit · **Rule id:** `holding-deposit`
+
+A holding deposit may not exceed one week’s rent (annual rent ÷ 52), only one may be held at a time, and it must normally be refunded within 7 days.
+
+- Give the applicant written terms before they pay: the amount, what it is for, when it is refundable, and the deadline for agreeing the tenancy.
+- The deadline for agreement is normally 15 days, extendable by written agreement.
+- Refund it within 7 days if the tenancy is not entered into, or if the landlord or agent decides not to proceed.
+- It may be retained only on the limited grounds in Schedule 2 — false or misleading information, a failed right to rent check, or the applicant withdrawing — and the reason must be given in writing within 7 days.
+- If the tenancy goes ahead, the holding deposit must be credited in full towards the rent or the deposit.
+
+Source: [GOV.UK — Tenant Fees Act 2019 guidance](https://www.gov.uk/government/collections/tenant-fees-act)
 
 ---
 

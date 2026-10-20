@@ -107,6 +107,57 @@ describe('edge cases', () => {
   });
 });
 
+describe('internal consistency', () => {
+  it('catches a weekday that does not match its date', () => {
+    // 5 September 2026 really is a Saturday.
+    const report = auditDocumentText('The first payment is due before Wednesday 5th September 2026.');
+    const finding = report.findings.find((item) => item.id === 'weekday-mismatch');
+    assert.ok(finding, 'a wrong weekday must be reported');
+    assert.equal(finding?.severity, 'error');
+    assert.match(finding?.detail ?? '', /Saturday/);
+  });
+
+  it('accepts a weekday that does match', () => {
+    // 30 October 2026 really is a Friday.
+    assert.equal(ids('Completion on Friday 30th October 2026.').includes('weekday-mismatch'), false);
+  });
+
+  it('catches two different rent due days in one document', () => {
+    const text =
+      'You must pay the rent in advance on the 1st of each month. ' +
+      'Subsequent rent payments must be paid in advance on the 4th of each month.';
+    const finding = auditDocumentText(text).findings.find((item) => item.id === 'rent-due-inconsistent');
+    assert.ok(finding, 'contradictory due days must be reported');
+    assert.match(finding?.detail ?? '', /1st/);
+    assert.match(finding?.detail ?? '', /4th/);
+  });
+
+  it('ignores a worked example about a different day', () => {
+    const text =
+      'Rent is due on the 4th of each month. ' +
+      'If the Tenancy is monthly and Rent is due on the 10th of each month, the Rental Period runs from the 10th.';
+    assert.equal(ids(text).includes('rent-due-inconsistent'), false);
+  });
+
+  it('flags a fixed late-payment fee as a prohibited payment', () => {
+    const report = auditDocumentText(
+      'For any late rental payment there is an additional £15 admin fee that will be added.',
+    );
+    const finding = report.findings.find((item) => item.id === 'prohibited-fee');
+    assert.ok(finding);
+    assert.equal(finding?.severity, 'error');
+    assert.equal(finding?.ruleId, 'prohibited-payments');
+  });
+
+  it('flags a duplicated ordinal as a typo', () => {
+    const report = auditDocumentText('Rent is payable in advance on the 1stth of each month.');
+    const finding = report.findings.find((item) => item.id === 'ordinal-typo');
+    assert.ok(finding);
+    assert.match(finding?.detail ?? '', /1stth/);
+    assert.match(finding?.detail ?? '', /meant to be/);
+  });
+});
+
 describe('our own templates', () => {
   it('all pass the audit they will apply to uploads', async () => {
     const registry = await TemplateRegistry.load('./templates');

@@ -8,6 +8,30 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — proofreading an uploaded document
+
+The audit now catches the errors that survive every human review, found by running
+it against the documents the client supplied:
+
+- **a weekday that does not match its date** — "Wednesday 5th September 2026" is a
+  Saturday;
+- **two different rent due days in one document** — "on the 1st" in clause 4 and
+  "on the 4th" in clause 5, skipping worked examples that mention another day;
+- **a fixed late-payment fee** — the client's contracts charge "£15 admin fee",
+  which under the Tenant Fees Act 2019 is very likely a prohibited payment;
+- **a mistyped ordinal** — "the 1stth of each month".
+
+Two rules were added to the knowledge base to back the last two:
+`prohibited-payments` and `holding-deposit`, both citing the Tenant Fees Act 2019
+guidance. `docs/RULES.md` regenerated (20 rules).
+
+### Added — `docs/ROADMAP.md`
+
+A sequenced plan with acceptance criteria for each milestone: deadlines and a
+cross-pack dashboard, finishing the upload flow, backup, bulk room lets,
+consistency checks, and the evidence timeline. Includes the open questions the
+client's documents raised.
+
 ### Added — filling an agency's own Word document (`src/docs/docxFill.ts`)
 
 The core of "use my document, not yours". A `.docx` is opened (it is a ZIP of
