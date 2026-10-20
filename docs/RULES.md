@@ -55,8 +55,9 @@ covers the Decent Homes Standard and Awaab’s Law, with timetables still being 
 | 16 | how to rent | [Give the tenant the How to Rent guide](#how-to-rent) |
 | 17 | landlord registration | [The PRS Database and Landlord Ombudsman are coming](#prs-database) |
 | 18 | agency compliance | [Agencies must display client money protection and redress scheme membership](#client-money) |
-| 19 | fees | [Only permitted payments may be charged to a tenant](#prohibited-payments) |
-| 20 | holding deposit | [A holding deposit is capped at one week’s rent and is refundable](#holding-deposit) |
+| 19 | jurisdiction | [The assured periodic tenancy regime applies in England](#england-only) |
+| 20 | fees | [Only permitted payments may be charged to a tenant](#prohibited-payments) |
+| 21 | holding deposit | [A holding deposit is capped at one week’s rent and is refundable](#holding-deposit) |
 
 ---
 
@@ -333,6 +334,23 @@ If you hold client money — deposits or rent — you must belong to a governmen
 - Check your professional body’s rules for the exact wording.
 
 Source: [GOV.UK — Client money protection schemes for property agents](https://www.gov.uk/government/publications/client-money-protection-schemes-for-property-agents)
+
+---
+
+<a id="england-only"></a>
+
+### The assured periodic tenancy regime applies in England
+
+**Topic:** jurisdiction · **Rule id:** `england-only`
+
+The Renters’ Rights Act 2025 and the assured tenancy regime it amends apply in England. Wales, Scotland and Northern Ireland each have their own framework.
+
+- Wales uses occupation contracts under the Renting Homes (Wales) Act 2016, not assured tenancies.
+- Scotland has private residential tenancies, and Northern Ireland has its own regulated tenancy regime and deposit arrangements.
+- A property outside England needs documents written for that jurisdiction. These templates do not apply and should not be used.
+- The landlord’s address for service of notices is different: section 48 of the Housing Act 1988 requires an address in England or Wales, so a landlord living abroad must still provide one.
+
+Source: [GOV.UK — Renters’ Rights Act implementation roadmap (applies to England)](https://www.gov.uk/government/publications/renters-rights-act-2025-implementation-roadmap/implementing-the-renters-rights-act-2025-our-roadmap-for-reforming-the-private-rented-sector)
 
 ---
 

@@ -144,6 +144,32 @@ describe('compliance checks', () => {
     assert.deepEqual(dates, [...dates].sort());
   });
 
+  it('refuses a postcode that is not in the UK', () => {
+    // A Swedish postcode and a US ZIP, both of which mean the wrong documents.
+    for (const postcode of ['422 41', '90210', 'Hisinga Backa']) {
+      const fields = completeFields();
+      fields['property.postcode'] = postcode;
+      const report = runComplianceChecks(fields, { today: TODAY });
+      const finding = report.findings.find((item) => item.id === 'postcode-not-uk');
+      assert.ok(finding, `${postcode} should be rejected`);
+      assert.equal(finding?.severity, 'error');
+      assert.equal(report.ok, false);
+    }
+  });
+
+  it('accepts UK postcodes, in any case and spacing', () => {
+    for (const postcode of ['M1 2AB', 'm1 2ab', 'M12AB', 'E17 3NU', 'PE30 2QQ', 'GIR 0AA']) {
+      const fields = completeFields();
+      fields['property.postcode'] = postcode;
+      const report = runComplianceChecks(fields, { today: TODAY });
+      assert.equal(
+        report.findings.some((item) => item.id === 'postcode-not-uk'),
+        false,
+        `${postcode} should be accepted`,
+      );
+    }
+  });
+
   it('warns when the client money protection field does not hold a scheme name', () => {
     const fields = completeFields();
     fields['agent.client_money_scheme'] = '£233';

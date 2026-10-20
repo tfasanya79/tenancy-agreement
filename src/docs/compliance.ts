@@ -91,6 +91,19 @@ function money(amount: number): string {
   return new Intl.NumberFormat('en-GB', { style: 'currency', currency: 'GBP', maximumFractionDigits: 2 }).format(amount);
 }
 
+/**
+ * Does this look like a UK postcode?
+ *
+ * Deliberately a shape test, not a validity test: it catches a Swedish
+ * `422 41` or a US `90210`, which is what matters here. `GIR 0AA` is the one
+ * genuine exception to the pattern.
+ */
+export function isUkPostcode(value: string): boolean {
+  const cleaned = value.toUpperCase().replace(/\s+/g, ' ').trim();
+  if (cleaned === 'GIR 0AA') return true;
+  return /^[A-Z]{1,2}\d[A-Z\d]?\s?\d[A-Z]{2}$/.test(cleaned);
+}
+
 /** Rent expressed as a weekly figure, whatever period it is quoted in. */
 export function weeklyRent(fields: Record<string, unknown>): number | null {
   const rent = asNumber(fields, 'tenancy.rent_amount');
@@ -316,6 +329,22 @@ export function runComplianceChecks(
       label: 'Next EICR due',
       date: toIso(expiry),
       detail: 'Electrical installation condition report is valid for five years.',
+    });
+  }
+
+  // England only. The assured periodic tenancy regime comes from the Renters'
+  // Rights Act 2025, which applies in England; Wales has its own framework, and
+  // Scotland and Northern Ireland theirs. A non-UK postcode here means the whole
+  // document is the wrong instrument, so this blocks generation.
+  const postcode = asText(fields, 'property.postcode');
+  if (postcode !== '' && !isUkPostcode(postcode)) {
+    add({
+      id: 'postcode-not-uk',
+      severity: 'error',
+      title: 'The property postcode is not a UK postcode',
+      detail: `“${postcode}” is not in the format of a UK postcode. These templates are English assured periodic tenancies and do not apply outside England — a property in Wales, Scotland, Northern Ireland or abroad needs different documents.`,
+      fields: ['property.postcode'],
+      ruleId: 'england-only',
     });
   }
 

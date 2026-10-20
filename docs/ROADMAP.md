@@ -23,7 +23,44 @@ right**, and **never lose the agency's formatting**.
 
 ---
 
-## M1 · Finish "bring your own document"
+## M1 · Back office and prefilling
+
+*The foundation the rest of this list stands on. Design: [BACKOFFICE.md](BACKOFFICE.md).*
+
+Today a pack is an island, so the property address, landlord, room and rent are
+retyped for every tenant — and there is nowhere to ask "which certificates expire
+this month?". The back office fixes both, and it is a prerequisite for M4 (bulk
+rooms need rooms to exist) and for the prefilling that makes the form short.
+
+**What it holds:** agency settings, landlords, properties, rooms, certificates,
+tenants, and the tenancy as the link between them. The current pack becomes a
+tenancy, and gains links instead of losing anything.
+
+**What it buys:** in an already-set-up room, a new tenancy needs **three typed
+details** — tenant name, tenant email, start date. Everything else is inherited or
+derived.
+
+**Deliberately excluded:** rent ledger, arrears, applications pipeline — see the
+"not building" list in [BACKOFFICE.md](BACKOFFICE.md#what-i-would-deliberately-not-build).
+
+- [ ] Settings screen for the agency's own details, so they stop editing `.env` by hand.
+- [ ] Landlord, Property, Room, Tenant and Certificate records in SQLite, with a
+      migration that derives them from the packs that already exist — previewed and
+      confirmed, never silently merged.
+- [ ] The tenancy form prefilled by inheritance, with provenance shown on every
+      inherited field ("from Room 2"), and an explicit way to override.
+- [ ] Editing a shared value asks before it changes existing tenancies.
+- [ ] A deterministic check that the property is in England or Wales. The assistant
+      already spotted a Swedish address; the code should catch it too.
+
+**Done when:** setting up a second tenant in a room that already exists takes three
+typed details, and no existing pack has lost a value.
+
+**Effort:** 3–4 sessions. **Depends on:** nothing. **Blocks:** M4.
+
+---
+
+## M2 · Finish "bring your own document"
 
 *The differentiator. Two thirds of it is already built and tested.*
 
@@ -63,7 +100,7 @@ reported at upload time. A demo pack renders from the documents in
 
 ---
 
-## M2 · Deadlines that chase you
+## M3 · Deadlines that chase you
 
 *You already compute the dates; nobody is told about them.*
 
@@ -82,7 +119,7 @@ into a single pack, and one button puts those dates in the agent's calendar.
 
 ---
 
-## M3 · Bulk room lets
+## M4 · Bulk room lets
 
 *The client lets room by room. Four rooms should not mean four identical rounds of typing.*
 
@@ -94,11 +131,11 @@ into a single pack, and one button puts those dates in the agent's calendar.
 **Done when:** filling a four-room house takes one form and one click, and produces four
 independent packs and eight documents.
 
-**Effort:** 2 sessions. **Depends on:** M1 for the client's own contract.
+**Effort:** 2 sessions. **Depends on:** M1 for the rooms, and M2 for the client's own contract.
 
 ---
 
-## M4 · Evidence and explanation
+## M5 · Evidence and explanation
 
 *What an agent needs three months later, and what a tenant is entitled to understand.*
 
@@ -112,11 +149,11 @@ independent packs and eight documents.
 **Done when:** a dispute can be answered from the app in under a minute, and every warning
 the app shows can be traced to a published source.
 
-**Effort:** 2 sessions. **Depends on:** M2 for the timeline data.
+**Effort:** 2 sessions. **Depends on:** M1 for the register, and M3 for the deadline data.
 
 ---
 
-## M5 · Prove it stays correct
+## M6 · Prove it stays correct
 
 *Quality work. Invisible when done well; expensive when skipped.*
 
@@ -135,11 +172,11 @@ the app shows can be traced to a published source.
 **Done when:** re-uploading the client's current contract reports the weekday and rent-day
 errors automatically, without being told where to look.
 
-**Effort:** 1–2 sessions. **Depends on:** M1.
+**Effort:** 1–2 sessions. **Depends on:** M2.
 
 ---
 
-## M6 · Make it safe for a non-technical owner
+## M7 · Make it safe for a non-technical owner
 
 - [ ] **Backup button**: one click downloads a ZIP of `data/`. Nobody is going to run `rsync`.
 - [ ] **Health panel** in the interface: templates loaded, key present, disk space, last
@@ -155,17 +192,21 @@ errors automatically, without being told where to look.
 ## Order and why
 
 ```
-M2  deadlines + dashboard      ← biggest gain, no dependencies, no AI
-M1  bring your own document    ← the differentiator
-M6  backup                     ← cheap insurance, do it before real use
-M3  bulk rooms                 ← once M1 lands, this is the client's daily work
-M5  consistency checks         ← turns the audit into a proofreader
-M4  evidence + tenant summary  ← polish that sells
+M1  back office + prefilling   ← unblocks everything else; kills the retyping
+M7  backup                     ← cheap insurance, do it before real use
+M2  bring your own document    ← the differentiator
+M3  deadlines + dashboard      ← best value once the register exists
+M4  bulk rooms                 ← needs M1's rooms
+M6  consistency checks         ← turns the audit into a proofreader
+M5  evidence + tenant summary  ← polish that sells
 ```
 
-M2 first because it is small and answers the question an agent actually asks daily. M1 second
-because the client has now supplied the documents. M6 third because real tenant data is
-already in `data/`, and it should be recoverable before it matters.
+M1 first because the client asked for exactly that — a back office and forms that
+fill themselves — and because M4 cannot be built without rooms. M7 second because
+real tenant data is already in `data/` and should be recoverable before it matters.
+M2 third because the client has now supplied the documents and the repaired versions
+are ready to become their reference template. M3 follows naturally once tenancies,
+rooms and certificates are real records rather than isolated packs.
 
 ---
 
@@ -187,7 +228,7 @@ already in `data/`, and it should be recoverable before it matters.
 | A model proposes a link that does not exist in the file | Links are verified against the document text before they are saved |
 | The law changes again (Phases 2 and 3 are still landing) | The rule set is dated, cited, and checked by the audit; `RULES.md` is generated from it |
 | Real tenant personal data leaks into git | `data/`, `.incoming/` and `received from the client/` are all git-ignored |
-| The agency's own wording contains an error nobody notices | M5 consistency checks; the audit; and the app never claims a document is legally correct |
+| The agency's own wording contains an error nobody notices | M6 consistency checks; the audit; and the app never claims a document is legally correct |
 
 ---
 
@@ -205,10 +246,19 @@ already in `data/`, and it should be recoverable before it matters.
 ## Open questions for the client
 
 1. The client's room-only contract says rent is due "on the 1st" in one clause and "on the
-   4th" in another — which is correct?
+   4th" in another — which is correct? (The repair used the 4th.)
 2. Is the £15 late-payment "admin fee" still charged? Under the Tenant Fees Act 2019 a flat
-   fee of that kind is very likely a prohibited payment.
+   fee of that kind is very likely a prohibited payment. (The repair replaced it with
+   statutory interest.)
 3. Are the holding deposit and the security deposit both taken before the tenancy starts, and
    is the holding deposit always one week's rent?
 4. Does the whole-house contract and the room-only contract need to stay separate, or should
    one document adapt to both cases?
+5. **Is any of the portfolio outside England and Wales?** A pack shows a Birmingham postcode
+   beside what looks like a Swedish address. If property abroad is genuinely let, the app must
+   refuse to produce an England & Wales agreement rather than warn and carry on.
+6. **Does "manage tenants" mean the full lifecycle** — upcoming, active, ending, ended, with an
+   end-of-tenancy pack — or only the paperwork at the start of a tenancy?
+7. **Should the register hold money** (deposits received and returned), or only the scheme
+   details needed for the prescribed information? The line between "record" and "accounting"
+   is worth drawing deliberately.

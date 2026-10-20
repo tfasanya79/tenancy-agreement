@@ -246,6 +246,20 @@ export const RULES: readonly Rule[] = [
     source: { label: 'GOV.UK — Client money protection schemes for property agents', url: 'https://www.gov.uk/government/publications/client-money-protection-schemes-for-property-agents' },
   },
   {
+    id: 'england-only',
+    topic: 'jurisdiction',
+    title: 'The assured periodic tenancy regime applies in England',
+    summary:
+      'The Renters’ Rights Act 2025 and the assured tenancy regime it amends apply in England. Wales, Scotland and Northern Ireland each have their own framework.',
+    detail: [
+      'Wales uses occupation contracts under the Renting Homes (Wales) Act 2016, not assured tenancies.',
+      'Scotland has private residential tenancies, and Northern Ireland has its own regulated tenancy regime and deposit arrangements.',
+      'A property outside England needs documents written for that jurisdiction. These templates do not apply and should not be used.',
+      'The landlord’s address for service of notices is different: section 48 of the Housing Act 1988 requires an address in England or Wales, so a landlord living abroad must still provide one.',
+    ],
+    source: { label: 'GOV.UK — Renters’ Rights Act implementation roadmap (applies to England)', url: GOV_UK_RRA },
+  },
+  {
     id: 'prohibited-payments',
     topic: 'fees',
     title: 'Only permitted payments may be charged to a tenant',
