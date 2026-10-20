@@ -8,6 +8,47 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — accounts, roles, and the record of who did what
+
+The app treated every request as "the agent". A single shared password was the
+only door, and nothing anywhere could say who changed a rent or deleted a pack.
+That is a difficult position to defend when the data is other people's tenancy
+paperwork.
+
+- **People, with roles.** `owner` can do everything; `agent` can do everything
+  about tenancies and records but not people or the agency settings; `landlord` is
+  read-only and sees only their own properties' tenancies. What each may call is
+  enforced once, in `src/auth/guard.ts`, before any route runs — a landlord asking
+  for another landlord's pack is told it does not exist, so the reply reveals
+  nothing.
+- **Passwords and sessions that are worth the name.** scrypt hashes with the
+  parameters stored alongside them, never a password in the database in the clear;
+  sessions are random tokens in an `HttpOnly`, `SameSite=Lax`, `Secure`-over-TLS
+  cookie, and only a SHA-256 of each token is stored. Twelve hours of use, at most
+  a week; changing your password signs out your other browsers.
+- **A first run that cannot be hijacked.** With no accounts the app shows a setup
+  screen; the endpoint behind it answers `409` for ever once the first account
+  exists.
+- **The interface offers only what the server allows.** A landlord gets the
+  tenancy list, read-only details, the documents and the history — no assistant,
+  no checks, no back office.
+- **An audit trail with a name on it.** Pack opened, details changed (the field
+  names, not a copy of the values), documents generated, notes with their author,
+  assistant runs, uploads, settings, migrations and account changes. The History
+  tab reads it and says who; packs that predate accounts degrade honestly to "what
+  happened" without inventing an author.
+- **People & access**, owner only: add somebody, choose their role, tie a landlord
+  account to a landlord record, generate or set a password, switch an account off
+  (which ends its sessions at once), and read the agency-wide activity log.
+
+Two new test files, and the reason for the second one: `tests/client-sanity.test.ts`
+tokenises `public/app.js` and fails if the interface calls a function it never
+declares. That is precisely how the Back office button shipped wired to a function
+that did not exist, and no test could have caught it before.
+
+Documentation: `docs/MULTI-USER.md` is new; `SECURITY.md` no longer says the app has
+no login; `docs/API.md`, `docs/USING-THE-APP.md`, `docs/ARCHITECTURE.md` and
+`docs/DEPLOY.md` are updated to match.
 ### Added — a runbook for hosting it on a real server
 
 `docs/DEPLOY.md` §4 now ends with the setup this has actually been deployed with:

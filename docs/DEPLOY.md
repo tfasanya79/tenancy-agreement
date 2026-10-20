@@ -4,7 +4,7 @@ TenancyDesk is one Node process with one SQLite file and one web page. There is 
 
 This guide covers four things: running it on your own computer, running it in Docker, running it on a small server, and looking after the data afterwards.
 
-> **Read this first.** TenancyDesk has **no login** — no accounts, no password. Anyone who can reach the port can read and change every tenant pack. Never put it directly on the public internet. Sections 3 and 4 show the safe ways to expose it.
+> **Read this first.** TenancyDesk has its own accounts, roles and sessions, so a request without a session is refused. That is not the whole story: the app expects to sit behind TLS, it has no second factor, and the protection of the data is still only as good as the passwords you hand out. Sections 3 and 4 show safe ways to expose it, and [docs/MULTI-USER.md](MULTI-USER.md) explains the roles.
 
 ---
 
@@ -386,7 +386,7 @@ npm install -g pnpm@10
 git clone <your-repo-url> ~/tenancydesk
 cd ~/tenancydesk
 pnpm install
-pnpm test          # 263 tests, no API key needed
+pnpm test          # 297 tests, no API key needed
 ```
 
 **Configuration in one root-owned file**, so the key is not in the project folder

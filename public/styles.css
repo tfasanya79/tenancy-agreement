@@ -811,3 +811,55 @@ input[type="file"] { font-size: .82rem; }
   max-height: 340px;
   overflow-y: auto;
 }
+/* --- signing in ----------------------------------------------------------- */
+
+body.is-gate .sidebar,
+body.is-gate .topbar-actions { display: none; }
+body.is-gate .workspace { grid-template-columns: minmax(0, 1fr); }
+body.is-gate .main { display: grid; place-items: center; min-height: 70vh; }
+
+.gate { width: 100%; max-width: 26rem; }
+.gate-card {
+  display: grid;
+  gap: .85rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: 1.6rem 1.5rem;
+  box-shadow: var(--shadow);
+}
+.gate-card h2 { font-size: 1.15rem; }
+.gate-card p { margin: 0; }
+.gate-card .field { display: grid; gap: .3rem; }
+.gate-card input {
+  font: inherit;
+  font-size: .95rem;
+  padding: .55rem .65rem;
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  background: var(--sand);
+  color: var(--ink);
+}
+.gate-card input:focus {
+  outline: none;
+  border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-soft);
+  background: var(--paper);
+}
+
+.whoami {
+  display: grid;
+  line-height: 1.15;
+  font-size: .78rem;
+  color: var(--ink-soft);
+  text-align: right;
+  padding: 0 .2rem;
+}
+.whoami strong { font-size: .82rem; color: var(--ink); }
+.whoami-role { color: var(--muted); font-size: .72rem; }
+
+.badge.role-owner { background: var(--accent-soft); color: var(--accent); }
+.badge.role-agent { background: var(--sand-deep); color: var(--ink-soft); }
+.badge.role-landlord { background: #fdf3e0; color: #8a5a12; }
+
+.mono { font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace; }

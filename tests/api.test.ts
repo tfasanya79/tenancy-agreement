@@ -13,6 +13,24 @@ import { AGREEMENT_TEMPLATE, GUARANTOR_TEMPLATE, completeFields, tempDir, writeT
 
 let app: FastifyInstance;
 let store: Store;
+/** The owner's session cookie. Every request in this file is made as them. */
+let cookie = '';
+
+type InjectArgs = {
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
+  url: string;
+  payload?: string | object;
+  headers?: Record<string, string>;
+};
+
+/**
+ * The API refuses anything without a session now, so the tests sign in as the
+ * owner once and use this wrapper. Tests that are *about* being signed out call
+ * `app.inject` directly, with no cookie.
+ */
+function inject(options: InjectArgs) {
+  return app.inject({ ...options, headers: { cookie, ...(options.headers ?? {}) } });
+}
 
 before(async () => {
   const templatesDir = join(tempDir('td-api-tpl-'), 'templates');
@@ -31,6 +49,17 @@ before(async () => {
   const registry = await TemplateRegistry.load(config.templatesDir);
   app = await buildApp({ config, store, registry });
   await app.ready();
+
+  const setup = await app.inject({
+    method: 'POST',
+    url: '/api/auth/setup',
+    payload: { name: 'Test Owner', email: 'owner@example.test', password: 'correct horse battery' },
+  });
+  assert.equal(setup.statusCode, 201);
+  const raw = setup.headers['set-cookie'];
+  const header = Array.isArray(raw) ? raw[0] : raw;
+  cookie = String(header ?? '').split(';')[0] ?? '';
+  assert.match(cookie, /^td_session=/);
 });
 
 after(async () => {
@@ -39,14 +68,14 @@ after(async () => {
 });
 
 async function createPack(): Promise<{ id: string; reference: string }> {
-  const response = await app.inject({ method: 'POST', url: '/api/packs', payload: { fields: {} } });
+  const response = await inject({ method: 'POST', url: '/api/packs', payload: { fields: {} } });
   assert.equal(response.statusCode, 201);
   return response.json().pack;
 }
 
 describe('meta endpoints', () => {
   it('reports its health', async () => {
-    const response = await app.inject({ method: 'GET', url: '/api/health' });
+    const response = await inject({ method: 'GET', url: '/api/health' });
     assert.equal(response.statusCode, 200);
     const body = response.json();
     assert.equal(body.ok, true);
@@ -55,19 +84,19 @@ describe('meta endpoints', () => {
   });
 
   it('lists the field catalogue and groups', async () => {
-    const body = (await app.inject({ method: 'GET', url: '/api/fields' })).json();
+    const body = (await inject({ method: 'GET', url: '/api/fields' })).json();
     assert.ok(body.groups.length > 0);
     assert.ok(body.fields.some((field: { key: string }) => field.key === 'tenancy.rent_amount'));
   });
 
   it('lists templates with the fields they still need', async () => {
-    const body = (await app.inject({ method: 'GET', url: '/api/templates' })).json();
+    const body = (await inject({ method: 'GET', url: '/api/templates' })).json();
     assert.equal(body.templates.length, 2);
     assert.ok(body.templates[0].missing.length >= 0);
   });
 
   it('serves the rules knowledge base', async () => {
-    const body = (await app.inject({ method: 'GET', url: '/api/rules?q=deposit' })).json();
+    const body = (await inject({ method: 'GET', url: '/api/rules?q=deposit' })).json();
     assert.ok(body.rules.length > 0);
     assert.ok(body.reviewedOn.startsWith('20'));
   });
@@ -81,7 +110,7 @@ describe('pack lifecycle', () => {
 
   it('merges fields sent by the form', async () => {
     const pack = await createPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'PATCH',
       url: `/api/packs/${pack.id}`,
       payload: { fields: { 'landlord.full_name': 'Priya Raman' } },
@@ -94,7 +123,7 @@ describe('pack lifecycle', () => {
 
   it('becomes ready once the essentials are present', async () => {
     const pack = await createPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'PATCH',
       url: `/api/packs/${pack.id}`,
       payload: { fields: completeFields() },
@@ -107,7 +136,7 @@ describe('pack lifecycle', () => {
 
   it('rejects a status it does not recognise but keeps the pack', async () => {
     const pack = await createPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'PATCH',
       url: `/api/packs/${pack.id}`,
       payload: { status: 'banana' },
@@ -118,11 +147,11 @@ describe('pack lifecycle', () => {
 
   it('moves a tenancy through its lifecycle', async () => {
     const pack = await createPack();
-    const created = (await app.inject({ method: 'GET', url: `/api/packs/${pack.id}` })).json();
+    const created = (await inject({ method: 'GET', url: `/api/packs/${pack.id}` })).json();
     assert.equal(created.pack.lifecycle, 'upcoming', 'a new tenancy has not started yet');
 
     for (const lifecycle of ['active', 'ending', 'ended']) {
-      const response = await app.inject({
+      const response = await inject({
         method: 'PATCH',
         url: `/api/packs/${pack.id}`,
         payload: { lifecycle },
@@ -130,13 +159,13 @@ describe('pack lifecycle', () => {
       assert.equal(response.json().pack.lifecycle, lifecycle);
     }
 
-    const listing = (await app.inject({ method: 'GET', url: '/api/packs' })).json();
+    const listing = (await inject({ method: 'GET', url: '/api/packs' })).json();
     assert.equal(listing.packs.find((item: { id: string }) => item.id === pack.id).lifecycle, 'ended');
   });
 
   it('ignores a lifecycle it does not recognise', async () => {
     const pack = await createPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'PATCH',
       url: `/api/packs/${pack.id}`,
       payload: { lifecycle: 'banana' },
@@ -146,7 +175,7 @@ describe('pack lifecycle', () => {
 
   it('adds and removes notes', async () => {
     const pack = await createPack();
-    const added = await app.inject({
+    const added = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/notes`,
       payload: { text: 'Protect the deposit within 30 days' },
@@ -154,15 +183,15 @@ describe('pack lifecycle', () => {
     const notes = added.json().notes;
     assert.equal(notes.length, 1);
 
-    const removed = await app.inject({ method: 'DELETE', url: `/api/packs/${pack.id}/notes/${notes[0].id}` });
+    const removed = await inject({ method: 'DELETE', url: `/api/packs/${pack.id}/notes/${notes[0].id}` });
     assert.equal(removed.json().notes.length, 0);
   });
 
   it('deletes a pack', async () => {
     const pack = await createPack();
-    const response = await app.inject({ method: 'DELETE', url: `/api/packs/${pack.id}` });
+    const response = await inject({ method: 'DELETE', url: `/api/packs/${pack.id}` });
     assert.equal(response.statusCode, 204);
-    const missing = await app.inject({ method: 'GET', url: `/api/packs/${pack.id}` });
+    const missing = await inject({ method: 'GET', url: `/api/packs/${pack.id}` });
     assert.equal(missing.statusCode, 404);
   });
 
@@ -172,7 +201,7 @@ describe('pack lifecycle', () => {
   // tenancy looked impossible. An empty body is now simply an empty body.
   it('deletes a pack even when the client claims an empty JSON body', async () => {
     const pack = await createPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'DELETE',
       url: `/api/packs/${pack.id}`,
       headers: { 'content-type': 'application/json' },
@@ -182,13 +211,13 @@ describe('pack lifecycle', () => {
 
   it('deletes a note whose request declares an empty JSON body', async () => {
     const pack = await createPack();
-    const added = await app.inject({
+    const added = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/notes`,
       payload: { text: 'Send the How to Rent guide' },
     });
     const [note] = added.json().notes;
-    const response = await app.inject({
+    const response = await inject({
       method: 'DELETE',
       url: `/api/packs/${pack.id}/notes/${note.id}`,
       headers: { 'content-type': 'application/json' },
@@ -198,7 +227,7 @@ describe('pack lifecycle', () => {
   });
 
   it('404s for a pack that does not exist', async () => {
-    const response = await app.inject({ method: 'GET', url: '/api/packs/not-a-real-id' });
+    const response = await inject({ method: 'GET', url: '/api/packs/not-a-real-id' });
     assert.equal(response.statusCode, 404);
     assert.match(response.json().error, /no longer exists/);
   });
@@ -207,13 +236,13 @@ describe('pack lifecycle', () => {
 describe('documents', () => {
   async function readyPack(): Promise<{ id: string }> {
     const pack = await createPack();
-    await app.inject({ method: 'PATCH', url: `/api/packs/${pack.id}`, payload: { fields: completeFields() } });
+    await inject({ method: 'PATCH', url: `/api/packs/${pack.id}`, payload: { fields: completeFields() } });
     return pack;
   }
 
   it('previews a document as HTML before generating it', async () => {
     const pack = await readyPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/preview`,
       payload: { templateId: 'test-agreement' },
@@ -226,7 +255,7 @@ describe('documents', () => {
 
   it('rejects a preview of an unknown document', async () => {
     const pack = await readyPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/preview`,
       payload: { templateId: 'nope' },
@@ -236,7 +265,7 @@ describe('documents', () => {
 
   it('generates documents and returns the refreshed pack', async () => {
     const pack = await readyPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/generate`,
       payload: { templateIds: ['test-agreement'] },
@@ -251,7 +280,7 @@ describe('documents', () => {
   it('asks before generating an incomplete pack, then generates on confirmation', async () => {
     const pack = await createPack();
 
-    const first = await app.inject({
+    const first = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/generate`,
       payload: {},
@@ -263,7 +292,7 @@ describe('documents', () => {
     assert.equal(asked.documents.length, 0, 'nothing is written before the agent agrees');
     assert.ok(asked.findings.length > 0);
 
-    const second = await app.inject({
+    const second = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/generate`,
       payload: { confirm: true },
@@ -272,7 +301,7 @@ describe('documents', () => {
     assert.ok(second.json().documents.length > 0);
 
     // Choosing to carry on is recorded as a note, not as a refusal.
-    const detail = (await app.inject({ method: 'GET', url: `/api/packs/${pack.id}` })).json();
+    const detail = (await inject({ method: 'GET', url: `/api/packs/${pack.id}` })).json();
     assert.ok(
       detail.pack.notes.some((note: { text: string }) => note.text.startsWith('Generated with')),
       'the acknowledgement is on the record',
@@ -281,9 +310,9 @@ describe('documents', () => {
 
   it('generates a complete pack without asking', async () => {
     const pack = await createPack();
-    await app.inject({ method: 'PATCH', url: `/api/packs/${pack.id}`, payload: { fields: completeFields() } });
+    await inject({ method: 'PATCH', url: `/api/packs/${pack.id}`, payload: { fields: completeFields() } });
 
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/generate`,
       payload: { templateIds: ['test-agreement'] },
@@ -295,7 +324,7 @@ describe('documents', () => {
 
   it('rejects an unknown template id', async () => {
     const pack = await readyPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/generate`,
       payload: { templateIds: ['nope'] },
@@ -307,7 +336,7 @@ describe('documents', () => {
   it('downloads the Word file with the right headers', async () => {
     const pack = await readyPack();
     const generated = (
-      await app.inject({
+      await inject({
         method: 'POST',
         url: `/api/packs/${pack.id}/generate`,
         payload: { templateIds: ['test-agreement'] },
@@ -315,7 +344,7 @@ describe('documents', () => {
     ).json();
     const documentId = generated.documents[0].id;
 
-    const response = await app.inject({
+    const response = await inject({
       method: 'GET',
       url: `/api/documents/${documentId}/download?format=docx`,
     });
@@ -328,13 +357,13 @@ describe('documents', () => {
   it('serves the HTML copy inline for printing', async () => {
     const pack = await readyPack();
     const generated = (
-      await app.inject({
+      await inject({
         method: 'POST',
         url: `/api/packs/${pack.id}/generate`,
         payload: { templateIds: ['test-agreement'] },
       })
     ).json();
-    const response = await app.inject({
+    const response = await inject({
       method: 'GET',
       url: `/api/documents/${generated.documents[0].id}/download?format=html&inline=1`,
     });
@@ -344,13 +373,13 @@ describe('documents', () => {
 
   it('bundles the pack and a summary sheet into one zip', async () => {
     const pack = await readyPack();
-    await app.inject({
+    await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/generate`,
       payload: { templateIds: ['test-agreement'] },
     });
 
-    const response = await app.inject({ method: 'GET', url: `/api/packs/${pack.id}/bundle.zip` });
+    const response = await inject({ method: 'GET', url: `/api/packs/${pack.id}/bundle.zip` });
     assert.equal(response.statusCode, 200);
     assert.match(response.headers['content-type'] as string, /application\/zip/);
     const body = response.rawPayload;
@@ -369,12 +398,12 @@ describe('documents', () => {
 
   it('refuses to bundle a pack with no documents', async () => {
     const pack = await createPack();
-    const response = await app.inject({ method: 'GET', url: `/api/packs/${pack.id}/bundle.zip` });
+    const response = await inject({ method: 'GET', url: `/api/packs/${pack.id}/bundle.zip` });
     assert.equal(response.statusCode, 400);
   });
 
   it('404s for a document that no longer exists', async () => {
-    const response = await app.inject({ method: 'GET', url: '/api/documents/nope/download' });
+    const response = await inject({ method: 'GET', url: '/api/documents/nope/download' });
     assert.equal(response.statusCode, 404);
   });
 });
@@ -382,31 +411,31 @@ describe('documents', () => {
 describe('letting several rooms at once', () => {
   it('creates one pack per tenant, each linked to its own room', async () => {
     const landlord = (
-      await app.inject({ method: 'POST', url: '/api/backoffice/landlords', payload: { name: 'Priya Raman', address: '4 Oak Lane' } })
+      await inject({ method: 'POST', url: '/api/backoffice/landlords', payload: { name: 'Priya Raman', address: '4 Oak Lane' } })
     ).json();
     const property = (
-      await app.inject({
+      await inject({
         method: 'POST',
         url: '/api/backoffice/properties',
         payload: { landlordId: landlord.id, addressLine1: '14 Beech Road', postcode: 'E17 3NU' },
       })
     ).json();
     const roomA = (
-      await app.inject({
+      await inject({
         method: 'POST',
         url: '/api/backoffice/rooms',
         payload: { propertyId: property.id, roomNumber: 'Room 1', rentAmount: 1300 },
       })
     ).json();
     const roomB = (
-      await app.inject({
+      await inject({
         method: 'POST',
         url: '/api/backoffice/rooms',
         payload: { propertyId: property.id, roomNumber: 'Room 2', rentAmount: 1450 },
       })
     ).json();
 
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: '/api/packs/bulk',
       payload: {
@@ -423,7 +452,7 @@ describe('letting several rooms at once', () => {
 
     // Each tenancy is its own record, linked to its own room and tenant.
     for (const created of body.created) {
-      const detail = (await app.inject({ method: 'GET', url: `/api/packs/${created.id}` })).json();
+      const detail = (await inject({ method: 'GET', url: `/api/packs/${created.id}` })).json();
       assert.notEqual(detail.pack.roomId, null);
       assert.notEqual(detail.pack.tenantId, null);
       assert.equal(detail.fields['property.address_line1'], '14 Beech Road', 'the property is inherited');
@@ -435,17 +464,17 @@ describe('letting several rooms at once', () => {
 
     // A start date in the past means it has already begun.
     const byName = new Map(body.created.map((item: { tenantName: string; id: string }) => [item.tenantName, item.id]));
-    const alex = (await app.inject({ method: 'GET', url: `/api/packs/${byName.get('Alex Morgan')}` })).json();
-    const sam = (await app.inject({ method: 'GET', url: `/api/packs/${byName.get('Sam Okafor')}` })).json();
+    const alex = (await inject({ method: 'GET', url: `/api/packs/${byName.get('Alex Morgan')}` })).json();
+    const sam = (await inject({ method: 'GET', url: `/api/packs/${byName.get('Sam Okafor')}` })).json();
     assert.equal(alex.pack.lifecycle, 'upcoming');
     assert.equal(sam.pack.lifecycle, 'active');
   });
 
   it('ignores a row with no room or no name, and refuses an empty request', async () => {
-    const empty = await app.inject({ method: 'POST', url: '/api/packs/bulk', payload: { lets: [] } });
+    const empty = await inject({ method: 'POST', url: '/api/packs/bulk', payload: { lets: [] } });
     assert.equal(empty.statusCode, 400);
 
-    const junk = await app.inject({
+    const junk = await inject({
       method: 'POST',
       url: '/api/packs/bulk',
       payload: { lets: [{ roomId: '', tenantName: 'Nobody' }] },
@@ -457,7 +486,7 @@ describe('letting several rooms at once', () => {
 describe('backup and health', () => {
   it('downloads one zip with the database inside', async () => {
     await createPack();
-    const response = await app.inject({ method: 'GET', url: '/api/backup' });
+    const response = await inject({ method: 'GET', url: '/api/backup' });
 
     assert.equal(response.statusCode, 200);
     assert.match(response.headers['content-type'] as string, /application\/zip/);
@@ -469,7 +498,7 @@ describe('backup and health', () => {
   });
 
   it('reports its own health, including what is on disk', async () => {
-    const body = (await app.inject({ method: 'GET', url: '/api/health' })).json();
+    const body = (await inject({ method: 'GET', url: '/api/health' })).json();
     assert.equal(body.ok, true);
     assert.ok(typeof body.node === 'string');
     assert.equal(typeof body.disk.databaseBytes, 'number');
@@ -480,7 +509,7 @@ describe('backup and health', () => {
 describe('assistant endpoint', () => {
   it('explains itself when no API key is configured', async () => {
     const pack = await createPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/assistant`,
       payload: { message: 'hello' },
@@ -491,7 +520,7 @@ describe('assistant endpoint', () => {
 
   it('requires a message', async () => {
     const pack = await createPack();
-    const response = await app.inject({
+    const response = await inject({
       method: 'POST',
       url: `/api/packs/${pack.id}/assistant`,
       payload: { message: '   ' },
@@ -557,11 +586,21 @@ describe('assistant streaming', () => {
     const sseApp = await buildApp({ config, store: sseStore, registry, client });
     await sseApp.ready();
 
+    // This app has its own database, so it needs its own owner and session.
+    const setup = await sseApp.inject({
+      method: 'POST',
+      url: '/api/auth/setup',
+      payload: { name: 'Stream Owner', email: 'stream@example.test', password: 'another long phrase' },
+    });
+    const sseCookie = String(setup.headers['set-cookie'] ?? '').split(';')[0] ?? '';
+    const sseInject = (options: InjectArgs) =>
+      sseApp.inject({ ...options, headers: { cookie: sseCookie, ...(options.headers ?? {}) } });
+
     const created = (
-      await sseApp.inject({ method: 'POST', url: '/api/packs', payload: { fields: {} } })
+      await sseInject({ method: 'POST', url: '/api/packs', payload: { fields: {} } })
     ).json();
 
-    const response = await sseApp.inject({
+    const response = await sseInject({
       method: 'POST',
       url: `/api/packs/${created.pack.id}/assistant`,
       payload: { message: 'The landlord is Priya Raman' },
@@ -584,7 +623,7 @@ describe('assistant streaming', () => {
     }
 
     const reloaded = (
-      await sseApp.inject({ method: 'GET', url: `/api/packs/${created.pack.id}` })
+      await sseInject({ method: 'GET', url: `/api/packs/${created.pack.id}` })
     ).json();
     assert.equal(reloaded.pack.fields['landlord.full_name'], 'Priya Raman');
 

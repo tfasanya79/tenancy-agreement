@@ -128,6 +128,37 @@ curl "http://localhost:3000/api/rules?q=deposit%20deadline"
 
 The rule set is static; no rule can be edited through the API.
 
+## Signing in
+
+Every route below needs a session cookie except `/api/health` and the three under
+`/api/auth` that exist to make a session. A request without one gets `401` with
+`signedOut: true`, which the interface uses to show the sign-in screen rather than an
+error.
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/api/auth/status` | `{ needsSetup, signedIn, user }` — the first call the page makes |
+| `POST` | `/api/auth/setup` | Creates the owner account. Only while no account exists, then `409` |
+| `POST` | `/api/auth/login` | `{ email, password }` → sets the session cookie. `429` after ten failures in a quarter hour |
+| `POST` | `/api/auth/logout` | Ends this session |
+| `GET` | `/api/auth/me` | The signed-in person |
+| `POST` | `/api/auth/password` | `{ current, next }` — changes your password and signs out your other browsers |
+| `GET` | `/api/auth/sessions` | The browsers currently signed in as you |
+| `GET` | `/api/users` | People, roles and the landlord records they may be tied to (owner only) |
+| `POST` | `/api/users` | `{ name, email, role, password, landlordId? }` (owner only) |
+| `PATCH` | `/api/users/:id` | `{ name?, role?, landlordId? }` (owner only) |
+| `POST` | `/api/users/:id/password` | Sets somebody's password and signs them out everywhere (owner only) |
+| `POST` | `/api/users/:id/disabled` | `{ disabled }` — switch an account off or on (owner only) |
+| `GET` | `/api/access/log` | The agency-wide trail of who did what (owner only) |
+
+A write from a browser sends its `Origin`; if that does not match the host the
+request is refused with `403`. Requests with no `Origin` at all — `curl`, a script —
+are allowed, because they are not riding on somebody's cookie in a browser.
+
+What each role may call is enforced once, in `src/auth/guard.ts`, before any route
+runs: see [docs/MULTI-USER.md](MULTI-USER.md). A landlord reaching for another
+landlord's pack gets `404`, not `403`, so the reply says nothing about what exists.
+
 ## Packs
 
 **`GET /api/packs`** — no body. Newest `updatedAt` first, built by

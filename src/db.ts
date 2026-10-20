@@ -29,7 +29,7 @@ export type PackLinks = {
   lifecycle: Lifecycle;
 };
 
-export type Note = { id: string; text: string; createdAt: string };
+export type Note = { id: string; text: string; createdAt: string; author?: string };
 
 export type CoverMessage = { email?: string; whatsapp?: string; createdAt: string };
 

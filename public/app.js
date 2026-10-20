@@ -9,6 +9,8 @@
 /* ---------------------------------------------------------------- state --- */
 
 const state = {
+  /** The signed-in person: { id, name, email, role, landlordId, landlordName }. */
+  me: null,
   config: null,
   groups: [],
   fields: [],
@@ -106,6 +108,9 @@ async function api(path, options = {}) {
     data = { error: text };
   }
   if (!response.ok) {
+    // A session that has expired or been revoked goes back to the door, rather
+    // than showing "Please sign in" as an error over a page it cannot load.
+    if (response.status === 401 && data && data.signedOut === true) signedOut();
     throw new Error((data && data.error) || `Request failed (${response.status})`);
   }
   return data;
@@ -115,33 +120,202 @@ async function api(path, options = {}) {
 
 async function boot() {
   try {
-    const [config, fields, templates, packs, custom] = await Promise.all([
-      api('/api/config'),
-      api('/api/fields'),
-      api('/api/templates'),
-      api('/api/packs'),
-      api('/api/custom-templates'),
-    ]);
-    state.config = config;
-    state.groups = fields.groups;
-    state.fields = fields.fields;
-    state.templates = templates.templates;
-    state.packs = packs.packs;
-    state.customTemplates = custom.templates ?? [];
-
-    renderStatus();
-    renderSidebar();
-
-    if (state.packs.length > 0) {
-      await selectPack(state.packs[0].id, { keepTab: false });
-    } else {
-      renderMain();
-    }
+    const status = await api('/api/auth/status');
+    if (status.needsSetup === true) return renderSetupScreen();
+    if (status.signedIn !== true) return renderSignInScreen();
+    state.me = status.user;
+    await loadWorkspace();
   } catch (error) {
     $('#main').replaceChildren(
       el('div', { class: 'notice notice-err' }, `TenancyDesk could not load: ${error.message}`),
     );
   }
+}
+
+/** Everything a signed-in person needs. Called at boot and after signing in. */
+async function loadWorkspace() {
+  document.body.classList.remove('is-gate');
+  const [config, fields, templates, packs, custom] = await Promise.all([
+    api('/api/config'),
+    api('/api/fields'),
+    api('/api/templates'),
+    api('/api/packs'),
+    // A landlord has no access to the agency's uploads, and does not need them.
+    state.me?.role === 'landlord' ? Promise.resolve({ templates: [] }) : api('/api/custom-templates'),
+  ]);
+  state.config = config;
+  state.groups = fields.groups;
+  state.fields = fields.fields;
+  state.templates = templates.templates;
+  state.packs = packs.packs;
+  state.customTemplates = custom.templates ?? [];
+
+  renderStatus();
+  renderIdentity();
+  renderSidebar();
+
+  if (state.packs.length > 0) {
+    await selectPack(state.packs[0].id, { keepTab: false });
+  } else {
+    renderMain();
+  }
+}
+
+/* ---------------------------------------------------------------- identity --- */
+
+const myRole = () => state.me?.role ?? 'agent';
+const isOwner = () => myRole() === 'owner';
+const isLandlord = () => myRole() === 'landlord';
+/** Staff change things; a landlord only looks. */
+const canWrite = () => !isLandlord();
+
+function renderIdentity() {
+  const who = $('#whoami');
+  const out = $('#sign-out');
+  const newPack = $('#new-pack');
+  const backOffice = $('#back-office');
+  if (state.me === null) {
+    who.hidden = true;
+    out.hidden = true;
+    return;
+  }
+
+  who.hidden = false;
+  out.hidden = false;
+  out.onclick = async () => {
+    try {
+      await api('/api/auth/logout', { method: 'POST' });
+    } catch {
+      // Signing out locally matters more than the round trip succeeding.
+    }
+    state.me = null;
+    state.packs = [];
+    state.detail = null;
+    state.chat.clear();
+    renderSignInScreen();
+  };
+
+  who.textContent = '';
+  who.append(
+    el('strong', {}, state.me.name || state.me.email),
+    el('span', { class: 'whoami-role' }, isLandlord() ? `Landlord · ${state.me.landlordName ?? 'no property'}` : isOwner() ? 'Owner' : 'Agent'),
+  );
+
+  // The interface offers only what the server would allow.
+  newPack.hidden = isLandlord();
+  backOffice.hidden = isLandlord();
+}
+
+/* ------------------------------------------------------------------- gate --- */
+
+/** A full-width card in place of the app, for signing in or setting up. */
+function gateCard({ title, blurb, fields, submitLabel, onSubmit, footer }) {
+  document.body.classList.add('is-gate');
+  const error = el('div', { class: 'notice notice-err', hidden: true });
+  const inputs = new Map();
+
+  const rows = fields.map((field) => {
+    const input = el('input', {
+      type: field.type ?? 'text',
+      id: `gate-${field.name}`,
+      placeholder: field.placeholder ?? '',
+      autocomplete: field.autocomplete ?? 'off',
+      autofocus: field.autofocus === true ? true : null,
+    });
+    inputs.set(field.name, input);
+    return el('div', { class: 'field' }, el('label', { for: `gate-${field.name}` }, field.label), input, field.help ? el('span', { class: 'help' }, field.help) : null);
+  });
+
+  const button = el('button', { class: 'btn btn-primary', type: 'submit' }, submitLabel);
+  const form = el(
+    'form',
+    {
+      class: 'gate-card',
+      onSubmit: async (event) => {
+        event.preventDefault();
+        error.hidden = true;
+        button.disabled = true;
+        const values = {};
+        for (const [name, input] of inputs) values[name] = input.value;
+        try {
+          await onSubmit(values);
+        } catch (caught) {
+          error.textContent = caught.message;
+          error.hidden = false;
+          button.disabled = false;
+        }
+      },
+    },
+    el('h2', {}, title),
+    el('p', { class: 'small' }, blurb),
+    error,
+    ...rows,
+    el('div', { class: 'form-actions' }, el('span', {}), button),
+    footer ?? null,
+  );
+
+  $('#main').replaceChildren(el('div', { class: 'gate' }, form));
+}
+
+function renderSignInScreen() {
+  document.body.classList.add('is-gate');
+  renderIdentity();
+  gateCard({
+    title: 'Sign in',
+    blurb: 'TenancyDesk holds tenant personal data, so it asks who you are first.',
+    fields: [
+      { name: 'email', label: 'Email', type: 'email', autocomplete: 'username', autofocus: true },
+      { name: 'password', label: 'Password', type: 'password', autocomplete: 'current-password' },
+    ],
+    submitLabel: 'Sign in',
+    onSubmit: async (values) => {
+      const result = await api('/api/auth/login', {
+        method: 'POST',
+        body: JSON.stringify({ email: values.email, password: values.password }),
+      });
+      state.me = result.user;
+      await loadWorkspace();
+    },
+  });
+}
+
+function renderSetupScreen() {
+  document.body.classList.add('is-gate');
+  gateCard({
+    title: 'Set up TenancyDesk',
+    blurb:
+      'There are no accounts yet. This one is the owner: it can do everything, including adding the other agents and landlords.',
+    fields: [
+      { name: 'name', label: 'Your name', placeholder: 'Mary Ajala', autofocus: true },
+      { name: 'email', label: 'Your email', type: 'email', placeholder: 'you@youragency.co.uk', autocomplete: 'username' },
+      { name: 'password', label: 'A password', type: 'password', autocomplete: 'new-password', help: 'At least 12 characters. Three unconnected words is a good password.' },
+      { name: 'confirm', label: 'The same password again', type: 'password', autocomplete: 'new-password' },
+    ],
+    submitLabel: 'Create the owner account',
+    onSubmit: async (values) => {
+      if (values.password !== values.confirm) throw new Error('The two passwords do not match.');
+      const result = await api('/api/auth/setup', {
+        method: 'POST',
+        body: JSON.stringify({ name: values.name, email: values.email, password: values.password }),
+      });
+      state.me = result.user;
+      await loadWorkspace();
+    },
+    footer: el(
+      'p',
+      { class: 'small' },
+      'Nobody else can reach this screen once it is done — after this, accounts are added from Back office → People & access.',
+    ),
+  });
+}
+
+/** A refused session anywhere drops the interface back to the door. */
+function signedOut() {
+  state.me = null;
+  state.detail = null;
+  state.packs = [];
+  state.chat.clear();
+  renderSignInScreen();
 }
 
 function renderStatus() {
@@ -351,13 +525,18 @@ function renderMain() {
   const title = pack.tenantName || 'Unnamed tenant';
   const errorCount = readiness.compliance.counts.error;
 
-  const tabs = [
-    ['assistant', 'Assistant', null],
-    ['details', 'Details', null],
-    ['documents', 'Documents', documents.length > 0 ? documents.length : null],
-    ['checks', 'Checks', errorCount > 0 ? errorCount : null],
-    ['history', 'History', null],
-  ];
+  // A landlord gets no assistant and no checks: one writes to the pack, the other
+  // is an opinion about it. They get the details, the documents and the history.
+  const documentTab = ['documents', 'Documents', documents.length > 0 ? documents.length : null];
+  const tabs = canWrite()
+    ? [
+        ['assistant', 'Assistant', null],
+        ['details', 'Details', null],
+        documentTab,
+        ['checks', 'Checks', errorCount > 0 ? errorCount : null],
+        ['history', 'History', null],
+      ]
+    : [['details', 'Details', null], documentTab, ['history', 'History', null]];
 
   main.replaceChildren(
     el(
@@ -376,29 +555,31 @@ function renderMain() {
             ? el('span', { class: 'badge badge-warn' }, `${errorCount} to look at`)
             : el('span', { class: 'badge badge-ok' }, 'Nothing outstanding'),
           el('span', { class: 'badge' }, `${documents.length} document${documents.length === 1 ? '' : 's'}`),
-          el(
-            'select',
-            {
-              class: 'lifecycle-select',
-              title: 'Where this tenancy is in its life',
-              onChange: async (event) => {
-                try {
-                  await api(`/api/packs/${pack.id}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({ lifecycle: event.target.value }),
-                  });
-                  await reloadDetail();
-                  await refreshPacks();
-                  renderMain();
-                } catch (error) {
-                  toast(error.message, true);
-                }
-              },
-            },
-            ...['upcoming', 'active', 'ending', 'ended'].map((value) =>
-              el('option', { value, selected: (pack.lifecycle ?? 'upcoming') === value }, LIFECYCLE_LABELS[value]),
-            ),
-          ),
+          canWrite()
+            ? el(
+                'select',
+                {
+                  class: 'lifecycle-select',
+                  title: 'Where this tenancy is in its life',
+                  onChange: async (event) => {
+                    try {
+                      await api(`/api/packs/${pack.id}`, {
+                        method: 'PATCH',
+                        body: JSON.stringify({ lifecycle: event.target.value }),
+                      });
+                      await reloadDetail();
+                      await refreshPacks();
+                      renderMain();
+                    } catch (error) {
+                      toast(error.message, true);
+                    }
+                  },
+                },
+                ...['upcoming', 'active', 'ending', 'ended'].map((value) =>
+                  el('option', { value, selected: (pack.lifecycle ?? 'upcoming') === value }, LIFECYCLE_LABELS[value]),
+                ),
+              )
+            : el('span', { class: 'badge' }, LIFECYCLE_LABELS[pack.lifecycle ?? 'upcoming']),
         ),
       ),
       el(
@@ -417,7 +598,9 @@ function renderMain() {
               'Download all (ZIP)',
             )
           : null,
-        el('button', { class: 'btn btn-danger btn-sm', type: 'button', onClick: deletePack }, 'Delete'),
+        canWrite()
+          ? el('button', { class: 'btn btn-danger btn-sm', type: 'button', onClick: deletePack }, 'Delete')
+          : null,
       ),
     ),
     el(
@@ -984,7 +1167,14 @@ function renderDetails() {
         )
       : null,
     ...sections,
-    el('div', { class: 'form-actions' }, progress, save),
+    canWrite()
+      ? el('div', { class: 'form-actions' }, progress, save)
+      : el(
+          'div',
+          { class: 'form-actions' },
+          progress,
+          el('span', { class: 'small' }, 'Read-only: ask the agency to change anything here.'),
+        ),
   );
 }
 
@@ -1024,12 +1214,20 @@ function renderField(field, values, provenance) {
     queueSave();
   };
 
-  const common = {
-    id: `field-${field.key}`,
-    'data-field': field.key,
-    onInput: track,
-    onChange: track,
-  };
+  // A landlord reads these fields; the inputs are refused by the server anyway,
+  // so they are shown disabled rather than pretending to accept a change.
+  const common = canWrite()
+    ? {
+        id: `field-${field.key}`,
+        'data-field': field.key,
+        onInput: track,
+        onChange: track,
+      }
+    : {
+        id: `field-${field.key}`,
+        'data-field': field.key,
+        disabled: true,
+      };
 
   const label = el(
     'label',
@@ -1102,19 +1300,21 @@ function renderPeopleField(field, values) {
         'div',
         { class: 'person-head' },
         el('strong', {}, `Tenant ${index + 1}`),
-        el(
-          'button',
-          {
-            class: 'btn btn-ghost btn-sm',
-            type: 'button',
-            onClick: () => {
-              card.remove();
-              renumber();
-              markPeopleDirty();
-            },
-          },
-          'Remove',
-        ),
+        canWrite()
+          ? el(
+              'button',
+              {
+                class: 'btn btn-ghost btn-sm',
+                type: 'button',
+                onClick: () => {
+                  card.remove();
+                  renumber();
+                  markPeopleDirty();
+                },
+              },
+              'Remove',
+            )
+          : null,
       ),
       el(
         'div',
@@ -1125,13 +1325,18 @@ function renderPeopleField(field, values) {
             { class: 'field' },
             el('label', {}, child.label),
             child.type === 'textarea'
-              ? el('textarea', { 'data-person-key': child.key, onInput: markPeopleDirty }, person[child.key] ?? '')
+              ? el(
+                  'textarea',
+                  { 'data-person-key': child.key, disabled: !canWrite(), ...(canWrite() ? { onInput: markPeopleDirty } : {}) },
+                  person[child.key] ?? '',
+                )
               : el('input', {
                   type: child.type === 'date' ? 'date' : 'text',
                   'data-person-key': child.key,
                   value: person[child.key] ?? '',
                   placeholder: child.placeholder || '',
-                  onInput: markPeopleDirty,
+                  disabled: !canWrite(),
+                  ...(canWrite() ? { onInput: markPeopleDirty } : {}),
                 }),
           ),
         ),
@@ -1156,19 +1361,21 @@ function renderPeopleField(field, values) {
     el('label', {}, field.label, field.core === true ? el('span', { class: 'field-need' }, 'needed') : null),
     field.help ? el('span', { class: 'help' }, field.help) : null,
     container,
-    el(
-      'button',
-      {
-        class: 'btn btn-sm',
-        type: 'button',
-        style: { marginTop: '.6rem' },
-        onClick: () => {
-          addPerson();
-          markPeopleDirty();
-        },
-      },
-      'Add another tenant',
-    ),
+    canWrite()
+      ? el(
+          'button',
+          {
+            class: 'btn btn-sm',
+            type: 'button',
+            style: { marginTop: '.6rem' },
+            onClick: () => {
+              addPerson();
+              markPeopleDirty();
+            },
+          },
+          'Add another tenant',
+        )
+      : null,
   );
 }
 
@@ -1672,40 +1879,59 @@ function checkFinding(finding, severity) {
 
 /** The record of what was given, when — the page that settles a dispute. */
 function renderHistory() {
-  const { pack, timeline } = state.detail;
-  const events = timeline ?? [];
+  const { pack, timeline, events, creator } = state.detail;
+  const audit = events ?? [];
+  const computed = timeline ?? [];
 
-  const kindLabel = {
-    created: 'Opened',
-    document: 'Document',
-    note: 'Note',
-    assistant: 'Assistant',
-    message: 'Message',
-    status: 'Status',
-  };
+  // Once a pack has been touched since accounts existed, the audit trail is the
+  // history: it knows who. Older packs fall back to what the app can infer.
+  const usingAudit = audit.length > 0;
 
-  const rows = events.map((event) =>
-    el(
-      'div',
-      { class: 'due-row' },
-      el(
-        'div',
-        { class: 'due-when' },
-        el('strong', {}, new Date(event.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })),
-        el('span', { class: 'small' }, new Date(event.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })),
-      ),
-      el(
-        'div',
-        { class: 'due-what' },
-        el('strong', {}, event.title),
+  const rows = usingAudit
+    ? audit.map((event) =>
         el(
-          'span',
-          { class: 'small' },
-          `${kindLabel[event.kind] ?? event.kind}${event.detail === '' ? '' : ` · ${event.detail}`}`,
+          'div',
+          { class: 'due-row' },
+          el(
+            'div',
+            { class: 'due-when' },
+            el('strong', {}, new Date(event.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })),
+            el('span', { class: 'small' }, new Date(event.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })),
+          ),
+          el(
+            'div',
+            { class: 'due-what' },
+            el('strong', {}, eventWords(event.kind)),
+            el(
+              'span',
+              { class: 'small' },
+              `${event.actorName === '' ? 'System' : event.actorName}${event.detail === '' ? '' : ` · ${event.detail}`}`,
+            ),
+          ),
         ),
-      ),
-    ),
-  );
+      )
+    : computed.map((event) =>
+        el(
+          'div',
+          { class: 'due-row' },
+          el(
+            'div',
+            { class: 'due-when' },
+            el('strong', {}, new Date(event.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })),
+            el('span', { class: 'small' }, new Date(event.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })),
+          ),
+          el(
+            'div',
+            { class: 'due-what' },
+            el('strong', {}, event.title),
+            el(
+              'span',
+              { class: 'small' },
+              `${event.kind}${event.detail === '' ? '' : ` · ${event.detail}`}`,
+            ),
+          ),
+        ),
+      );
 
   return el(
     'div',
@@ -1716,8 +1942,14 @@ function renderHistory() {
       el(
         'div',
         {},
-        el('h3', { style: { fontSize: '.95rem' } }, 'What happened, and when'),
-        el('p', { class: 'small' }, 'Everything the app recorded for this tenancy, newest first.'),
+        el('h3', { style: { fontSize: '.95rem' } }, 'What happened, and who did it'),
+        el(
+          'p',
+          { class: 'small' },
+          usingAudit
+            ? `Everything recorded for this tenancy, newest first${creator === null ? '' : ` · opened by ${creator.name}`}.`
+            : 'This pack was opened before accounts existed, so the app can only show what happened, not who did it.',
+        ),
       ),
       el(
         'button',
@@ -1731,7 +1963,7 @@ function renderHistory() {
         'Print this history',
       ),
     ),
-    events.length === 0
+    rows.length === 0
       ? el('div', { class: 'notice notice-info' }, 'Nothing recorded yet.')
       : el('div', { class: 'bo-section mt' }, ...rows),
     el(
@@ -2051,13 +2283,19 @@ function askToContinue(asked, onContinue) {
 }
 
 const BO_TABS = [
-  ['settings', 'Our details'],
-  ['properties', 'Properties & rooms'],
-  ['people', 'Landlords & tenants'],
-  ['documents', 'Our documents'],
-  ['health', 'Health & backup'],
-  ['tidy', 'Tidy up'],
+  ['settings', 'Our details', ['owner']],
+  ['properties', 'Properties & rooms', ['owner', 'agent']],
+  ['people', 'Landlords & tenants', ['owner', 'agent']],
+  ['documents', 'Our documents', ['owner', 'agent']],
+  ['access', 'People & access', ['owner']],
+  ['health', 'Health & backup', ['owner']],
+  ['tidy', 'Tidy up', ['owner']],
 ];
+
+/** The tabs this person is allowed to see, in order. */
+function backOfficeTabs() {
+  return BO_TABS.filter(([, , roles]) => roles.includes(myRole()));
+}
 
 /** Load the agency's own records, uploads and health figures. */
 async function loadBackOffice() {
@@ -2125,14 +2363,17 @@ function renderBackOffice(main) {
     ),
   );
 
+  const allowed = backOfficeTabs();
+  const current = allowed.some(([id]) => id === state.boTab) ? state.boTab : (allowed[0]?.[0] ?? 'settings');
+
   const tabs = el(
     'div',
     { class: 'bo-links' },
-    ...BO_TABS.map(([id, label]) =>
+    ...allowed.map(([id, label]) =>
       el(
         'button',
         {
-          class: `btn btn-sm${state.boTab === id ? ' is-active' : ''}`,
+          class: `btn btn-sm${current === id ? ' is-active' : ''}`,
           type: 'button',
           onClick: () => {
             state.boTab = id;
@@ -2150,11 +2391,12 @@ function renderBackOffice(main) {
   }
 
   let body;
-  if (state.boTab === 'properties') body = renderPropertiesSection(data);
-  else if (state.boTab === 'people') body = renderPeopleSection(data);
-  else if (state.boTab === 'documents') body = renderOurDocumentsSection();
-  else if (state.boTab === 'health') body = renderHealthSection();
-  else if (state.boTab === 'tidy') body = renderMigrationSection(data);
+  if (current === 'properties') body = renderPropertiesSection(data);
+  else if (current === 'people') body = renderPeopleSection(data);
+  else if (current === 'documents') body = renderOurDocumentsSection();
+  else if (current === 'access') body = renderAccessSection();
+  else if (current === 'health') body = renderHealthSection();
+  else if (current === 'tidy') body = renderMigrationSection(data);
   else body = renderSettingsSection(data);
 
   main.replaceChildren(header, tabs, body);
@@ -2643,6 +2885,324 @@ function fieldPicker(value, onChange) {
   );
   selects.addEventListener('change', () => onChange(selects.value));
   return selects;
+}
+
+/* ------------------------------------------------------ people and access --- */
+
+/** A password a person can actually type, and that nobody can guess. */
+function suggestPassword() {
+  const bytes = new Uint8Array(24);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (byte) => 'abcdefghijkmnpqrstuvwxyz23456789'[byte % 32]).join('').slice(0, 20);
+}
+
+const ROLE_WORDS = {
+  owner: 'Owner — everything, including people and settings',
+  agent: 'Agent — every tenancy and record, no settings or people',
+  landlord: 'Landlord — read-only, their own tenancies only',
+};
+
+const EVENT_WORDS = {
+  'auth.login': 'Signed in',
+  'auth.logout': 'Signed out',
+  'auth.setup': 'Created the first account',
+  'auth.password': 'Changed their password',
+  'pack.created': 'Opened a tenancy',
+  'pack.deleted': 'Deleted a tenancy',
+  'fields.changed': 'Changed details',
+  'documents.generated': 'Generated documents',
+  'note.added': 'Added a note',
+  'note.removed': 'Removed a note',
+  'assistant.run': 'Used the assistant',
+  'upload.added': 'Uploaded a document',
+  'upload.updated': 'Changed a mapping',
+  'upload.removed': 'Removed a document',
+  'settings.updated': 'Changed the agency details',
+  'backoffice.migrated': 'Tidied up the records',
+  'user.created': 'Added somebody',
+  'user.updated': 'Changed somebody’s access',
+  'user.disabled': 'Switched an account off',
+  'user.enabled': 'Switched an account on',
+  'user.password': 'Reset a password',
+  'record.landlords.created': 'Added a landlord',
+  'record.properties.created': 'Added a property',
+  'record.rooms.created': 'Added a room',
+  'record.tenants.created': 'Added a tenant',
+};
+
+const eventWords = (kind) => EVENT_WORDS[kind] ?? kind;
+
+function roleBadge(role) {
+  return el('span', { class: `badge role-${role}` }, role === 'owner' ? 'Owner' : role === 'agent' ? 'Agent' : 'Landlord');
+}
+
+/** Set somebody's password, or generate one and show it once. */
+function passwordDialog(user) {
+  const close = () => $('#modal-root').replaceChildren();
+  const suggestion = suggestPassword();
+  const shown = el('input', { type: 'text', value: suggestion, readonly: true, class: 'mono' });
+  const own = el('input', { type: 'text', placeholder: 'Or type one (at least 12 characters)' });
+  const error = el('div', { class: 'notice notice-err', hidden: true });
+
+  const set = async () => {
+    const chosen = own.value.trim() === '' ? shown.value : own.value.trim();
+    try {
+      await api(`/api/users/${user.id}/password`, {
+        method: 'POST',
+        body: JSON.stringify({ password: chosen }),
+      });
+      close();
+      toast(`Password set for ${user.name || user.email}. They have been signed out everywhere.`);
+      renderMain();
+    } catch (caught) {
+      error.textContent = caught.message;
+      error.hidden = false;
+    }
+  };
+
+  $('#modal-root').replaceChildren(
+    el(
+      'div',
+      { class: 'modal-backdrop', onClick: (event) => { if (event.target === event.currentTarget) close(); } },
+      el(
+        'div',
+        { class: 'modal', style: { height: 'auto' } },
+        el('div', { class: 'modal-head' }, el('h3', {}, `Password for ${user.name || user.email}`), el('button', { class: 'btn btn-sm', type: 'button', onClick: close }, 'Close')),
+        el(
+          'div',
+          { class: 'modal-body' },
+          el('p', { class: 'small' }, 'Generated for you — copy it before you close this. It is not stored anywhere you can read it again.'),
+          error,
+          el('div', { class: 'field' }, el('label', {}, 'A suggestion'), shown),
+          el('div', { class: 'field' }, el('label', {}, 'Their own choice'), own),
+          el(
+            'div',
+            { class: 'form-actions' },
+            el(
+              'button',
+              {
+                class: 'btn',
+                type: 'button',
+                onClick: async () => {
+                  try {
+                    await navigator.clipboard.writeText(shown.value);
+                    toast('Copied.');
+                  } catch {
+                    toast('Select the text and copy it by hand.', true);
+                  }
+                },
+              },
+              'Copy',
+            ),
+            el('button', { class: 'btn btn-primary', type: 'button', onClick: set }, 'Set this password'),
+          ),
+        ),
+      ),
+    ),
+  );
+}
+
+function renderAccessSection() {
+  const box = el('div', { class: 'bo-grid' }, el('p', { class: 'small' }, 'Loading people…'));
+
+  void (async () => {
+    let data;
+    let log = { events: [] };
+    try {
+      data = await api('/api/users');
+      if (isOwner()) log = await api('/api/access/log').catch(() => ({ events: [] }));
+    } catch (error) {
+      box.replaceChildren(el('div', { class: 'notice notice-err' }, error.message));
+      return;
+    }
+
+    const refresh = () => renderMain();
+
+    // --- add somebody ------------------------------------------------------
+    const nameInput = el('input', { type: 'text', id: 'new-user-name', placeholder: 'Ade Bello' });
+    const emailInput = el('input', { type: 'email', id: 'new-user-email', placeholder: 'ade@youragency.co.uk' });
+    const roleSelect = el(
+      'select',
+      { id: 'new-user-role' },
+      ...data.roles.map((role) => el('option', { value: role, selected: role === 'agent' }, ROLE_WORDS[role])),
+    );
+    const landlordSelect = el(
+      'select',
+      { id: 'new-user-landlord' },
+      el('option', { value: '' }, '— choose the landlord record —'),
+      ...(data.landlords ?? []).map((landlord) => el('option', { value: landlord.id }, landlord.name)),
+    );
+    const landlordRow = el('div', { class: 'field', hidden: true }, el('label', {}, 'Which landlord'), landlordSelect);
+    const passwordInput = el('input', { type: 'text', id: 'new-user-password', value: suggestPassword() });
+
+    roleSelect.addEventListener('change', () => {
+      landlordRow.hidden = roleSelect.value !== 'landlord';
+    });
+    if ((data.landlords ?? []).length === 0) {
+      landlordRow.hidden = true;
+    }
+
+    const addPerson = el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Add somebody'),
+      el(
+        'p',
+        { class: 'small' },
+        'They sign in with their own email and password, and the History shows what each person did. Give the password to them privately — it is shown here once.',
+      ),
+      el(
+        'div',
+        { class: 'grid-2' },
+        el('div', { class: 'field' }, el('label', {}, 'Their name'), nameInput),
+        el('div', { class: 'field' }, el('label', {}, 'Their email'), emailInput),
+      ),
+      el('div', { class: 'field' }, el('label', {}, 'What they may do'), roleSelect),
+      landlordRow,
+      el(
+        'div',
+        { class: 'field' },
+        el('label', {}, 'A password for them'),
+        passwordInput,
+        el(
+          'button',
+          {
+            class: 'btn btn-ghost btn-sm',
+            type: 'button',
+            style: { marginTop: '.35rem', justifySelf: 'start' },
+            onClick: () => {
+              passwordInput.value = suggestPassword();
+            },
+          },
+          'Suggest another',
+        ),
+      ),
+      el(
+        'div',
+        { class: 'form-actions' },
+        el('span', { class: 'small' }, 'At least 12 characters'),
+        el(
+          'button',
+          {
+            class: 'btn btn-primary',
+            type: 'button',
+            onClick: async () => {
+              try {
+                await api('/api/users', {
+                  method: 'POST',
+                  body: JSON.stringify({
+                    name: nameInput.value.trim(),
+                    email: emailInput.value.trim(),
+                    role: roleSelect.value,
+                    password: passwordInput.value,
+                    landlordId: roleSelect.value === 'landlord' ? landlordSelect.value : null,
+                  }),
+                });
+                toast(`${nameInput.value.trim() || 'They'} can sign in now. Give them the password you just set.`);
+                refresh();
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Add them',
+        ),
+      ),
+    );
+
+    // --- the list ----------------------------------------------------------
+    const personRow = (person) => {
+      const actions = el('div', { style: { display: 'flex', gap: '.35rem', flexWrap: 'wrap' } });
+
+      if (person.id !== state.me?.id) {
+        actions.append(
+          el(
+            'button',
+            {
+              class: 'btn btn-sm',
+              type: 'button',
+              onClick: async () => {
+                try {
+                  await api(`/api/users/${person.id}/disabled`, {
+                    method: 'POST',
+                    body: JSON.stringify({ disabled: !person.disabled }),
+                  });
+                  toast(person.disabled ? 'Switched back on.' : 'Switched off, and signed out everywhere.');
+                  refresh();
+                } catch (error) {
+                  toast(error.message, true);
+                }
+              },
+            },
+            person.disabled ? 'Switch on' : 'Switch off',
+          ),
+          el('button', { class: 'btn btn-sm', type: 'button', onClick: () => passwordDialog(person) }, 'Set a password'),
+        );
+      }
+
+      return el(
+        'div',
+        { class: 'bo-row' },
+        el(
+          'div',
+          { class: 'bo-what' },
+          el(
+            'strong',
+            {},
+            person.name || person.email,
+            person.id === state.me?.id ? el('span', { class: 'small' }, ' (you)') : null,
+          ),
+          el(
+            'span',
+            {},
+            `${person.email}${person.landlordName === null ? '' : ` · ${person.landlordName}`}${
+              person.lastLoginAt === null ? ' · never signed in' : ` · last in ${new Date(person.lastLoginAt).toLocaleString('en-GB')}`
+            }`,
+          ),
+        ),
+        el('div', { style: { display: 'flex', gap: '.5rem', alignItems: 'center', flexWrap: 'wrap' } },
+          person.disabled ? el('span', { class: 'badge badge-warn' }, 'switched off') : roleBadge(person.role),
+          actions,
+        ),
+      );
+    };
+
+    const people = el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, `People · ${data.users.length}`),
+      el('p', { class: 'small' }, 'Agents can do everything about tenancies. Landlords can only read their own.'),
+      el('div', {}, ...data.users.map(personRow)),
+    );
+
+    const logRows = (log.events ?? []).slice(0, 25).map((event) =>
+      el(
+        'div',
+        { class: 'bo-row' },
+        el(
+          'div',
+          { class: 'bo-what' },
+          el('strong', {}, eventWords(event.kind)),
+          el('span', {}, `${event.actorName}${event.detail === '' ? '' : ` · ${event.detail}`}`),
+        ),
+        el('span', { class: 'small' }, new Date(event.at).toLocaleString('en-GB')),
+      ),
+    );
+
+    box.replaceChildren(
+      addPerson,
+      people,
+      el(
+        'div',
+        { class: 'bo-section' },
+        el('h3', {}, 'Recent activity'),
+        el('p', { class: 'small' }, 'Who did what, across the whole agency. Every pack’s own History tab has the tenancy-level version.'),
+        logRows.length === 0 ? el('p', { class: 'small' }, 'Nothing yet.') : el('div', {}, ...logRows),
+      ),
+    );
+  })();
+
+  return box;
 }
 
 function renderOurDocumentsSection() {

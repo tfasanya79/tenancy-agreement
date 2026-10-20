@@ -23,18 +23,20 @@ Some packs also hold guarantor details and landlord contact details.
 
 Read this before deploying anywhere.
 
-- **Single user. No accounts. No login. No password.** The app has no concept of a user at all.
-- **No rate limiting, no CSRF tokens, no session handling.** Every request that reaches the port is treated as the letting agent.
-- **No encryption at rest beyond whatever your operating system does.** The SQLite file and the generated documents are plain files. If the disk is not encrypted, a stolen laptop or a discarded drive is a data breach.
-- **No access log beyond process output.** `NODE_ENV=production` makes the server log requests; nothing audits who viewed which pack, because nobody is identified.
+- **Accounts, sessions and roles.** Every request needs a signed-in session. Roles are `owner` (everything, including people and settings), `agent` (every tenancy, no settings or people) and `landlord` (read-only, their own tenancies only). See [docs/MULTI-USER.md](docs/MULTI-USER.md).
+- **Passwords are scrypt hashes** (`src/auth/passwords.ts`), never stored or logged in the clear. Sessions are random tokens in an `HttpOnly`, `SameSite=Lax` cookie; only a SHA-256 of each token is stored, so a copy of the database cannot be used to sign in. Limitation: **no second factor, no password reset by email, and no lockout longer than fifteen minutes.** Add a second factor at the proxy or VPN (below) if you need one.
+- **Still no encryption at rest beyond whatever your operating system does.** The SQLite file and the generated documents are plain files. If the disk is not encrypted, a stolen laptop or a discarded drive is a data breach.
+- **An audit trail, not a full audit.** Who opened, changed, generated, deleted or downloaded is recorded per tenancy and shown in the History tab. Reads of individual documents are not recorded; the proxy access log covers those at request level.
 
-The correct deployment is therefore one of:
+A landlord account is confined to their own records by a guard in `src/auth/guard.ts`, applied to every route: a pack that is not theirs answers "not found", and every write is refused. The tests in `tests/auth.test.ts` exercise those refusals.
 
-1. On a **trusted machine** that only you use, ideally reached at `localhost`.
-2. Behind a **VPN** — Tailscale, WireGuard or your router's VPN — so the only clients are your own devices.
-3. Behind an **authenticating reverse proxy** that requires a password and terminates HTTPS.
+The correct deployment is therefore:
 
-Never expose the port directly to the public internet. Anyone who finds it can read, alter and delete every tenant pack, and can spend your DeepSeek credit. `docs/DEPLOY.md` §4 has an nginx configuration with TLS, basic auth and security headers.
+1. Behind **HTTPS**, always — the session cookie carries `Secure` when the request arrives over TLS.
+2. With the app on **loopback** and a reverse proxy in front, ideally with a second factor in front of that (`docs/DEPLOY.md` §4).
+3. On a **VPN** if the people using it are few and mobile — Tailscale or WireGuard — which removes the public door entirely.
+
+Signing in is now the front door, but it is not a substitute for transport security or for giving each person their own account. Never share one login between people: it removes the attribution the History tab exists to provide.
 
 ## What the app does to protect data
 
@@ -91,7 +93,7 @@ Access control is the biggest lever, but it is not the only one. These are the g
 
 | Risk | Why it remains | What you can do |
 | --- | --- | --- |
-| A stolen, unlocked laptop | The app trusts whoever is at the keyboard, and the browser session needs no password | Lock the screen, use disk encryption, keep the machine with you |
+| A stolen, unlocked laptop | A browser left signed in needs no password until the session expires (twelve hours of use, at most a week) | Lock the screen, use disk encryption, and sign out on a machine you are leaving |
 | Phishing or a shared screen | Packs are visible to anyone looking at the display | Treat a pack as you would a paper file |
 | Malicious or mistaken data entered | The app stores what you type, and the assistant may fill fields from it | Check what the assistant recorded before generating anything |
 | A wrong document reaching a tenant | Generation is a rendering step, not a legal review | Read the `.docx`, check the compliance panel, and only then send |
@@ -126,8 +128,8 @@ Some reports are not bugs. These are known, deliberate properties of the design:
 
 | Report | Why it is by design |
 | --- | --- |
-| "There is no login / anyone can read the packs" | Single-user app, no account model. Protecting the port is a deployment decision — see §1. |
-| "No rate limiting / no password complexity / no MFA" | There are no accounts to protect. Use a VPN or an authenticating proxy. |
+| "Who has been let in?" | Back office → People & access lists every account, its role and when it last signed in. Switch one off and its sessions end at once. |
+| "No second factor / no password reset by email" | Ten logins per quarter hour, then a lockout; an owner sets passwords in People & access. Put a second factor at the proxy or VPN if you need one. |
 | "Data is stored unencrypted on disk" | Relies on operating-system disk encryption, as documented above. |
 | "The assistant invented a fact / got the law wrong" | It is a language model. It can be wrong, and its output is a draft. Check every value and every document before a tenant sees it. |
 | "The generated document is not legally correct" | Templates are illustrations of how the software works, not legal advice (see `LICENSE`). The agency is responsible for the document it serves. |

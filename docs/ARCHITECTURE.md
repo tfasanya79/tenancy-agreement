@@ -19,7 +19,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 263 tests on `node:test` |
+| Tests | `tests/` | 297 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -60,6 +60,9 @@ graph TD
 
 Plain-text version, because the diagram is the summary and this is the detail:
 
+0. Before any of this, an `onRequest` hook resolves the session cookie, refuses the
+   request if there is none, and works out what the caller may do
+   (`src/auth/guard.ts`). Every route below assumes it has already run.
 1. The browser holds one pack id. Every action is a request about that pack.
 2. `app.ts` loads the pack from SQLite — `pack.fields` is a plain object such as
    `{ "landlord.full_name": "Priya Raman", "tenants": [{…}] }`.
@@ -71,7 +74,8 @@ Plain-text version, because the diagram is the summary and this is the detail:
 5. The assistant takes a different route: `runAgent()` talks to DeepSeek, the model
    asks for tools, `executeTool()` runs ordinary code against the same `Store` the
    routes use, and results go back to the model. The browser sees each step as a
-   server-sent event.
+   server-sent event. It runs as the person who asked, so what it changes is
+   attributed to them.
 
 The important consequence: **the assistant and the user's mouse drive the same
 functions**. There is no second, AI-only path that could produce different
@@ -204,7 +208,8 @@ cannot invent a clause, and it cannot produce a document that the checks reject.
 
 ## The data model
 
-Three tables in `src/db.ts`:
+Six tables. Three describe the work (`src/db.ts`), three describe the people
+(`src/auth/store.ts`), and all six live in the same SQLite file:
 
 ```
 packs          id, reference, tenant_name, property_address, status,
@@ -213,14 +218,30 @@ documents      id, pack_id → packs.id, template_id, title,
                docx_path, html_path, md_path, checksum, byte_size, generated_at
 agent_runs     id, pack_id → packs.id, kind, model, prompt_tokens,
                completion_tokens, steps_json, summary, created_at
+
+users          id, email (unique), name, role, password_hash, landlord_id,
+               created_at, disabled_at, last_login_at
+sessions       id (sha256 of the cookie token), user_id → users.id,
+               created_at, last_seen_at, expires_at, ip, user_agent
+events         id, pack_id, actor_id, actor_name, kind, detail, at
 ```
 
 **Why `fields_json` and not a normalised table?** A pack's fields are an open,
 versioned dictionary that the templates define. Normalising them means a migration
 every time a document needs a new detail, and a join for every render. The JSON
 column means adding a field to `src/docs/fields.ts` is the whole change. The cost is
-that you cannot query "all packs in Manchester" in SQL — which a single-user tool
+that you cannot query "all packs in Manchester" in SQL — which a single-agency tool
 with tens of packs does not need.
+
+**Why is the session token not stored?** `sessions.id` is the SHA-256 of the token in
+the cookie. A copy of the database therefore cannot be turned into a signed-in
+browser: the rows recognise a token, they do not contain one.
+
+**Why an `events` table rather than columns on `packs`?** "Who changed the rent" is
+a question with many answers over time, and one column holds one. The events table
+is append-only, carries the actor's name as it was when they acted, and is what the
+History tab reads. It records the *kind* of change and the field names involved, not
+a copy of the values — tenant data belongs in one place, not two.
 
 `tenant_name` and `property_address` are denormalised onto `packs` purely so the
 sidebar can list packs without parsing every JSON blob.
@@ -273,6 +294,9 @@ data directory.
 | Change the printed/PDF look | `CSS` in `src/docs/toHtml.ts` |
 | Add or change an endpoint | `src/app.ts` |
 | Change the interface | `public/app.js`, `public/styles.css` |
+| Change who may do what | `src/auth/guard.ts` (the route rules) and `renderIdentity` in `public/app.js` (what is offered) |
+| Change session length or password strength | `SESSION_HOURS`, `SESSION_MAX_DAYS` in `src/auth/store.ts`; `MIN_PASSWORD_LENGTH` in `src/auth/passwords.ts` |
+| Record a new kind of activity | call `note(request, kind, detail, packId)` in `src/app.ts`, then add the wording to `EVENT_WORDS` in `public/app.js` |
 | Change the ZIP contents sheet | `src/docs/packSummary.ts` |
 | Change when the app asks before generating | `src/docs/gate.ts` |
 | Change which deadlines appear, or how they are gathered | `src/backoffice/due.ts` |

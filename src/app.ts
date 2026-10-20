@@ -33,6 +33,9 @@ import { buildBackup, healthOf } from './backoffice/backup.ts';
 import { renderTimelineHtml, sortTimeline } from './docs/timeline.ts';
 import { buildCalendar } from './util/ics.ts';
 import { CustomTemplateStore } from './backoffice/customTemplates.ts';
+import { AuthStore } from './auth/store.ts';
+import { currentUser, isLandlord, registerAuthGuard, requireUser } from './auth/guard.ts';
+import { registerAuthRoutes } from './auth/routes.ts';
 import { buildReplacements, extractDocxText, fillDocx, fillDocxBlanks, formatLike, resolveFieldPath } from './docs/docxFill.ts';
 import { proposeLinks } from './docs/linkProposal.ts';
 import { auditDocumentText } from './docs/templateAudit.ts';
@@ -108,6 +111,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   const app = Fastify({
     logger: process.env['NODE_ENV'] === 'production' ? { level: 'info' } : false,
     bodyLimit: 16 * 1024 * 1024, // room for a base64 .docx upload
+    // Behind Caddy every connection comes from 127.0.0.1: without this, the
+    // session record and the audit trail would all say "the proxy".
+    trustProxy: '127.0.0.1',
   });
 
   const client =
@@ -141,6 +147,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   // The back office shares the same SQLite file and connection as the packs.
   const backOffice = new BackOffice(store.handle);
   const customTemplates = new CustomTemplateStore(store.handle, config.dataDir);
+
+  // Who may do what. Registered before any route, so every route below is behind
+  // the guard: a request without a session is refused before it is handled.
+  const auth = new AuthStore(store.handle);
+  auth.purgeExpiredSessions();
+  registerAuthGuard(app, { auth, store });
+  registerAuthRoutes(app, { auth, backOffice });
+  /** Record something for the person making this request. */
+  const note = (request: FastifyRequest, kind: string, detail: string, packId: string | null = null) => {
+    auth.record({ packId, actor: currentUser(request), kind, detail });
+  };
 
   /**
    * Agency details for a pack: settings saved in the app win, then `.env`.
@@ -224,6 +241,12 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         room: pack.roomId === null ? null : backOffice.getRoom(pack.roomId),
         tenant: pack.tenantId === null ? null : backOffice.getTenant(pack.tenantId),
       },
+      /** Who touched this pack, and what they did — the History tab's "who". */
+      events: auth.eventsForPack(pack.id, 200),
+      creator: (() => {
+        const created = auth.packCreator(pack.id);
+        return created === null ? null : { name: created.actorName, at: created.at };
+      })(),
     };
   };
 
@@ -320,7 +343,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const pick = (key: string): string | undefined =>
       typeof body[key] === 'string' ? (body[key] as string).trim() : undefined;
 
-    return backOffice.saveSettings({
+    const saved = backOffice.saveSettings({
       ...(pick('name') === undefined ? {} : { name: pick('name') as string }),
       ...(pick('address') === undefined ? {} : { address: pick('address') as string }),
       ...(pick('phone') === undefined ? {} : { phone: pick('phone') as string }),
@@ -333,18 +356,42 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         ? { reviewMode: body['reviewMode'] as ReviewMode }
         : {}),
     });
+    note(request, 'settings.updated', 'Agency details changed');
+    return saved;
   });
 
   /** Everything the back-office screens need, in one response. */
-  app.get('/api/backoffice', async () => {
-    const properties = backOffice.listProperties();
-    const rooms = backOffice.roomSummary();
+  app.get('/api/backoffice', async (request) => {
+    const viewer = currentUser(request);
+    // A landlord gets their own records and nothing else: no other landlords, no
+    // other properties, and no tenancy counts that would leak the neighbours.
+    const landlordScope = viewer !== null && isLandlord(viewer) ? viewer.landlordId : null;
+
+    const landlordRecords = backOffice
+      .listLandlords()
+      .filter((landlord) => landlordScope === null || landlord.id === landlordScope);
+    const properties = backOffice
+      .listProperties()
+      .filter((property) => landlordScope === null || property.landlordId === landlordScope);
+    const propertyIds = new Set(properties.map((property) => property.id));
+    const rooms = backOffice.roomSummary().filter((room) => propertyIds.has(room.propertyId));
     const tenancies = store.listPacks();
+    const visibleTenancies =
+      landlordScope === null ? tenancies : tenancies.filter((pack) => pack.landlordId === landlordScope);
+    const tenantIds = new Set(visibleTenancies.map((pack) => pack.tenantId).filter((id): id is string => id !== null));
+    const tenants = backOffice
+      .listTenants()
+      .filter((tenant) => landlordScope === null || tenantIds.has(tenant.id));
 
     return {
       settings: backOffice.getSettings(),
-      stats: backOffice.stats(),
-      landlords: backOffice.listLandlords().map((landlord) => ({
+      stats: {
+        landlords: landlordRecords.length,
+        properties: properties.length,
+        rooms: rooms.length,
+        tenants: tenants.length,
+      },
+      landlords: landlordRecords.map((landlord) => ({
         ...landlord,
         propertyCount: properties.filter((property) => property.landlordId === landlord.id).length,
       })),
@@ -353,11 +400,11 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         landlord: property.landlordId === null ? null : backOffice.getLandlord(property.landlordId),
         rooms: rooms.filter((room) => room.propertyId === property.id),
       })),
-      tenants: backOffice.listTenants().map((tenant) => ({
+      tenants: tenants.map((tenant) => ({
         ...tenant,
         tenancyCount: tenancies.filter((pack) => pack.tenantId === tenant.id).length,
       })),
-      unlinked: tenancies
+      unlinked: visibleTenancies
         .filter((pack) => pack.propertyId === null)
         .map((pack) => ({ id: pack.id, reference: pack.reference, tenantName: pack.tenantName })),
     };
@@ -376,6 +423,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
               : kind === 'rooms'
                 ? backOffice.createRoom(body as { propertyId: string })
                 : backOffice.createTenant(body);
+        note(request, `record.${kind}.created`, String((created as { name?: string; fullName?: string }).name ?? (created as { fullName?: string }).fullName ?? ''));
         return reply.code(201).send(created);
       } catch (error) {
         return badRequest(reply, error instanceof Error ? error.message : String(error));
@@ -433,7 +481,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     if (body['confirm'] !== true) {
       return { applied: false, plan };
     }
-    return { applied: true, result: applyMigration(plan, backOffice, store), plan };
+    const result = applyMigration(plan, backOffice, store);
+    note(request, 'backoffice.migrated', `Linked ${plan.links.length} tenanc${plan.links.length === 1 ? 'y' : 'ies'} to records`);
+    return { applied: true, result, plan };
   });
 
   // --- the agency's own documents -----------------------------------------
@@ -490,6 +540,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       wordCount: proposal.wordCount,
     });
 
+    note(request, 'upload.added', `${template.name} (${proposal.mode === 'blanks' ? 'blank form' : 'values'})`);
     return reply.code(201).send({ template, proposal });
   });
 
@@ -499,6 +550,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     const body = (request.body ?? {}) as Record<string, unknown>;
     const mode = body['fillMode'];
+    note(request, 'upload.updated', `Mapping changed for ${customTemplates.get(id)?.name ?? 'a document'}`);
     return customTemplates.update(id, {
       ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
       ...(mode === 'values' || mode === 'blanks' ? { fillMode: mode } : {}),
@@ -523,7 +575,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.delete('/api/custom-templates/:id', async (request, reply) => {
     const id = (request.params as Record<string, string>)['id'] ?? '';
     if (customTemplates.get(id) === null) return notFound(reply, 'That document no longer exists.');
+    const removed = customTemplates.get(id);
     customTemplates.delete(id);
+    note(request, 'upload.removed', removed?.name ?? '');
     return reply.code(204).send();
   });
 
@@ -583,16 +637,32 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // --- what is due ---------------------------------------------------------
 
-  app.get('/api/due', async () => {
+  app.get('/api/due', async (request) => {
     const report = aggregateDue(store, backOffice);
-    return { ...report, generatedAt: new Date().toISOString() };
+    const viewer = currentUser(request);
+    const items =
+      viewer !== null && isLandlord(viewer) && viewer.landlordId !== null
+        ? report.items.filter((item) => {
+            const pack = store.findPack(item.packId);
+            return pack !== null && pack.landlordId === viewer.landlordId;
+          })
+        : report.items;
+    return { ...report, items, generatedAt: new Date().toISOString() };
   });
 
   /** Every deadline, as a calendar the agency can subscribe to once. */
-  app.get('/api/calendar.ics', async (_request, reply) => {
+  app.get('/api/calendar.ics', async (request, reply) => {
     const report = aggregateDue(store, backOffice);
+    const viewer = currentUser(request);
+    const mine =
+      viewer !== null && isLandlord(viewer) && viewer.landlordId !== null
+        ? report.items.filter((item) => {
+            const pack = store.findPack(item.packId);
+            return pack !== null && pack.landlordId === viewer.landlordId;
+          })
+        : report.items;
     const calendar = buildCalendar(
-      report.items.map((item) => ({
+      mine.map((item) => ({
         uid: `${item.packId}-${item.kind}-${item.date}`,
         date: item.date,
         title: `${item.label} — ${item.tenantName === '' ? item.reference : item.tenantName}`,
@@ -675,6 +745,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       });
 
       const linked = store.getPack(pack.id);
+      note(request, 'pack.created', `${linked.reference} (bulk let)`, linked.id);
       created.push({
         id: linked.id,
         reference: linked.reference,
@@ -725,9 +796,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // --- packs --------------------------------------------------------------
 
-  app.get('/api/packs', async () => ({
-    packs: store.listPacks().map((pack) => packSummaryView(pack, store, effectiveFor(pack))),
-  }));
+  app.get('/api/packs', async (request) => {
+    const viewer = currentUser(request);
+    const packs = store.listPacks();
+    // A landlord sees the tenancies for their own properties, and no others.
+    const visible =
+      viewer !== null && isLandlord(viewer) && viewer.landlordId !== null
+        ? packs.filter((pack) => pack.landlordId === viewer.landlordId)
+        : packs;
+    return { packs: visible.map((pack) => packSummaryView(pack, store, effectiveFor(pack))) };
+  });
 
   app.post('/api/packs', async (request, reply) => {
     const body = (request.body ?? {}) as Record<string, unknown>;
@@ -739,6 +817,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     // Settings, so changing them later must not leave stale copies behind.
     const seeded: Record<string, unknown> = mergeFields({}, rawFields).merged;
     const pack = store.createPack(seeded);
+    note(request, 'pack.created', pack.reference, pack.id);
     return reply.code(201).send(packDetail(pack));
   });
 
@@ -760,6 +839,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     let fields = pack.fields;
     if (rawFields !== undefined) {
       fields = mergeFields(pack.fields, rawFields).merged;
+      const changed = Object.keys(rawFields).filter(
+        (key) => JSON.stringify(pack.fields[key] ?? null) !== JSON.stringify(fields[key] ?? null),
+      );
+      if (changed.length > 0) note(request, 'fields.changed', changed.join(', '), pack.id);
     }
 
     let status = pack.status;
@@ -794,6 +877,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   app.delete('/api/packs/:id', async (request, reply) => {
     const pack = store.findPack(paramId(request));
     if (pack === null) return notFound(reply, 'That pack no longer exists.');
+    note(request, 'pack.deleted', `${pack.reference} ${pack.tenantName}`.trim(), pack.id);
     store.deletePack(pack.id);
     return reply.code(204).send();
   });
@@ -806,7 +890,16 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const text = typeof body['text'] === 'string' ? body['text'].trim() : '';
     if (text === '') return badRequest(reply, 'Write something first.');
 
-    const notes = [...pack.notes, { id: crypto.randomUUID(), text, createdAt: new Date().toISOString() }];
+    const notes = [
+      ...pack.notes,
+      {
+        id: crypto.randomUUID(),
+        text,
+        createdAt: new Date().toISOString(),
+        author: currentUser(request)?.name ?? '',
+      },
+    ];
+    note(request, 'note.added', text.slice(0, 160), pack.id);
     return store.updatePack(pack.id, { notes });
   });
 
@@ -816,6 +909,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     const noteId = (request.params as Record<string, string>)['noteId'];
     const notes = pack.notes.filter((note) => note.id !== noteId);
+    note(request, 'note.removed', '', pack.id);
     return store.updatePack(pack.id, { notes });
   });
 
@@ -899,10 +993,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
               .map((finding) => finding.title)
               .join('; ')}.`,
             createdAt: new Date().toISOString(),
+            author: currentUser(request)?.name ?? '',
           },
         ],
       });
     }
+
+    note(
+      request,
+      'documents.generated',
+      `${generated.length} document${generated.length === 1 ? '' : 's'}: ${generated.map((document) => document.title).join(', ')}`,
+      pack.id,
+    );
 
     return { documents: generated, pack: packDetail(store.getPack(pack.id)), gate };
   });
@@ -1025,7 +1127,9 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       closed = true;
     });
 
+    let replyText = '';
     const send = (event: AgentEvent | { type: 'fatal'; message: string }) => {
+      if (event.type === 'message' || event.type === 'done') replyText = event.text;
       if (closed) return;
       raw.write(`data: ${JSON.stringify(event)}\n\n`);
     };
@@ -1048,6 +1152,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     } catch (error) {
       send({ type: 'fatal', message: error instanceof Error ? error.message : String(error) });
     } finally {
+      // What was asked, and what came back — attributed, like everything else.
+      note(
+        request,
+        'assistant.run',
+        `${message.slice(0, 120)}${replyText.trim() === '' ? '' : ` → ${replyText.trim().slice(0, 160)}`}`,
+        pack.id,
+      );
       if (!closed) raw.end();
     }
   });

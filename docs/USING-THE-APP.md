@@ -19,6 +19,33 @@ at all.
 
 ---
 
+## Signing in
+
+TenancyDesk asks who you are before it shows anything, because the packs inside it
+are tenant personal data. Your agency's owner sets you up in **Back office → People
+& access** and gives you a password; you sign in with your email address and that
+password.
+
+There are three kinds of account:
+
+- **Owner** — everything, including adding people and changing the agency details.
+- **Agent** — every tenancy and record, but not people or the agency settings.
+- **Landlord** — read-only, and only their own properties' tenancies.
+
+The first time the app runs there are no accounts, so it asks you to create the
+owner. That screen closes permanently once the first account exists.
+
+What you can do is decided by the app, not just hidden in the page: a landlord's
+write is refused by the server, and a pack that is not theirs simply does not
+exist as far as they can tell. The **History** tab on each pack names the person who
+did each thing.
+
+You stay signed in for twelve hours of use, and at most a week. **Sign out** is at
+the top right. If you change your password, every other browser signed in as you is
+signed out too — which is the point of changing it.
+
+Details of roles, adding people and what a landlord can see: [docs/MULTI-USER.md](MULTI-USER.md).
+
 ## The screen
 
 One screen. A list of packs down the left, four tabs across the top.
@@ -213,7 +240,8 @@ tenancy. It is where a detail is written once instead of on every pack.
 | **Properties & rooms** | Each property, and each room in it. Fill the address once here and a new pack for that property inherits it. |
 | **Landlords & tenants** | The landlord's name and address, and the tenants you have dealt with before. |
 | **Our documents** | Upload your own Word templates — see [Your own documents](#your-own-documents). |
-| **Health & backup** | **Download a backup** — one zip with the database, every document and every upload — plus what is on disk and what the app can see. |
+| **People & access** | Add an agent or a landlord, set a password, switch an account off, and read who did what across the agency — see [Multi-user](MULTI-USER.md). |
+| **Health & backup** | **Download a backup** — one zip with the database, every document and every upload — plus what is on disk and what the app can see. Owner only: it contains every tenant's data. |
 | **Tidy up** | Pull the details you have already typed into packs into the records above, so the next tenancy is quicker. It shows you what it would do before it does anything. |
 
 Nothing in the back office is required. A tenancy works with the details typed on
