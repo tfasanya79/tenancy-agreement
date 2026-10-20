@@ -35,3 +35,6 @@ tsconfig.tsbuildinfo
 
 # Documents received from the client — real personal data, never commit
 received from the client/
+
+# Corrected copies of the client's contracts — still contain personal data
+repaired contracts/

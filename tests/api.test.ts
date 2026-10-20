@@ -7,6 +7,7 @@ import { loadConfig } from '../src/config.ts';
 import { Store } from '../src/db.ts';
 import { TemplateRegistry } from '../src/docs/registry.ts';
 import { DeepSeekClient } from '../src/agent/deepseek.ts';
+import { readZip } from '../src/util/zip.ts';
 import type { FastifyInstance } from 'fastify';
 import { AGREEMENT_TEMPLATE, GUARANTOR_TEMPLATE, completeFields, tempDir, writeTemplate } from './helpers.ts';
 
@@ -251,9 +252,15 @@ describe('documents', () => {
     const body = response.rawPayload;
     assert.equal(body.subarray(0, 2).toString('latin1'), 'PK');
 
-    const text = body.toString('utf8');
-    assert.match(text, /00 - Pack summary\.txt/);
-    assert.match(text, /TENANCYDESK — DOCUMENT PACK/);
+    // Entries are compressed, so read them back rather than scanning the bytes.
+    const entries = readZip(body);
+    const summary = entries.get('00 - Pack summary.txt');
+    assert.ok(summary, 'the bundle must contain a contents sheet');
+    assert.match(summary.toString('utf8'), /TENANCYDESK — DOCUMENT PACK/);
+    assert.ok(
+      [...entries.keys()].some((name) => name.endsWith('.docx')),
+      'the bundle must contain the generated documents',
+    );
   });
 
   it('refuses to bundle a pack with no documents', async () => {

@@ -16,6 +16,7 @@
     "sample": "node --env-file-if-exists=.env scripts/make-sample.ts",
     "rules": "node scripts/gen-rules.ts",
     "docs:check": "node scripts/check-docs.ts",
+    "repair:contracts": "node scripts/repair-contracts.ts",
     "demo:fill": "node scripts/demo-fill.ts"
   },
   "keywords": [

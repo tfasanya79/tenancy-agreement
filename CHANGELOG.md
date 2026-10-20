@@ -8,6 +8,33 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — repairing an agency's own contracts (`scripts/repair-contracts.ts`)
+
+`pnpm repair:contracts` produces corrected copies of an agency's own documents
+without touching the originals:
+
+- every edit is a text substitution inside the original `.docx`, so letterheads,
+  tables, clause numbering and fonts are preserved exactly;
+- it reports the audit of each document before and after;
+- it writes a change log listing every edit as before/after text, grouped by
+  severity, with the decisions a human must confirm;
+- when a replacement cannot be found it says so and fails, rather than quietly
+  producing a half-repaired document.
+
+Applied to the documents the client supplied: nine substantive repairs per
+contract — the assured-shorthold and section 21 language, the second section 21
+clause in 8.2.2, the legacy reference in 8.2.6, the rent review procedure, the £15
+late-payment fee, the release clause that charged a tenant for leaving, and the
+deposit-forfeiture clause — plus the two internal errors in the room-only contract.
+Both documents went from three or four audit errors to zero.
+
+### Fixed — ZIP entries are compressed again
+
+`createZip()` stored every entry uncompressed, so a filled Word document came back
+nearly four times its original size. It now deflates each entry when that helps and
+stores it when it does not; a repaired contract is 119 KB against the original's
+141 KB. Two tests cover both branches.
+
 ### Added — proofreading an uploaded document
 
 The audit now catches the errors that survive every human review, found by running

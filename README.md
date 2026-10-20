@@ -408,7 +408,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     193 tests
+├── tests/                     195 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -425,11 +425,12 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 193 tests |
+| `pnpm test` | Run the 195 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm sample` | Rebuild `samples/` from the templates |
 | `pnpm demo:fill` | Show the "use our own Word document" engine filling an example agreement |
+| `pnpm repair:contracts` | Produce corrected copies of an agency's own contracts, with a change log (needs their files in `received from the client/`) |
 | `pnpm rules` | Regenerate `docs/RULES.md` from the rule set |
 
 ---
@@ -520,13 +521,14 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 193 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 195 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
 | Room-by-room lettings | ✅ `property.room_number`, first payment date derived from the start date |
 | Agreement audit — is an uploaded document still current? | ✅ flags assured shorthold, section 21, fixed terms and vague rent reviews |
 | Proofreading a document for internal contradictions | ✅ a weekday that does not match its date, two different rent due days, a fixed late-payment fee, a mistyped ordinal |
+| Repairing an agency's own contracts | ✅ `pnpm repair:contracts` rewrites the defective clauses in place, keeps the layout, and logs every change for sign-off |
 | Filling an agency's own `.docx` without losing its formatting | ✅ engine and tests; `pnpm demo:fill` shows it working |
 | Upload screen for a custom document | 🚧 next — engine and audit are ready, the interface is not wired up yet |
 | Accounts, multi-user | ✗ by design |
@@ -547,7 +549,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 193 tests
+pnpm test        # 195 tests
 pnpm typecheck
 ```
 

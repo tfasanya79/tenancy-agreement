@@ -1,13 +1,17 @@
 /**
- * A minimal ZIP writer (no compression, "store" method).
+ * A small ZIP writer.
  *
- * Why not a library? An agent wants one button that saves the whole pack, and a
- * stored ZIP is a few dozen lines of buffer arithmetic. This keeps the
- * dependency list — and therefore the install — small.
+ * Compresses each entry with deflate when that actually makes it smaller, so a
+ * Word file comes back at roughly its original size rather than several times
+ * larger. Reading is handled by `readZip()` below.
+ *
+ * Why not a library? An agent wants one button that saves the whole pack, and
+ * this is a few dozen lines of buffer arithmetic. It keeps the dependency list —
+ * and therefore the install — small.
  */
 
 import { Buffer } from 'node:buffer';
-import { inflateRawSync } from 'node:zlib';
+import { deflateRawSync, inflateRawSync } from 'node:zlib';
 
 const CRC_TABLE = (() => {
   const table = new Uint32Array(256);
@@ -49,31 +53,44 @@ export function createZip(entries: ZipEntry[], modified = new Date()): Buffer {
     const nameBytes = Buffer.from(entry.name.replace(/\\/g, '/'), 'utf8');
     const checksum = crc32(data);
 
+    // Deflate when it actually helps. A Word file is mostly XML, which compresses
+    // to a fraction of its size; storing it would hand back a document several
+    // times larger than the one that went in.
+    let method = 0;
+    let payload = data;
+    if (data.length > 200) {
+      const deflated = deflateRawSync(data, { level: 6 });
+      if (deflated.length < data.length) {
+        method = 8;
+        payload = deflated;
+      }
+    }
+
     const local = Buffer.alloc(30);
     local.writeUInt32LE(0x04034b50, 0);
     local.writeUInt16LE(20, 4); // version needed
     local.writeUInt16LE(0x0800, 6); // UTF-8 names
-    local.writeUInt16LE(0, 8); // store
+    local.writeUInt16LE(method, 8);
     local.writeUInt16LE(time, 10);
     local.writeUInt16LE(date, 12);
     local.writeUInt32LE(checksum, 14);
-    local.writeUInt32LE(data.length, 18);
+    local.writeUInt32LE(payload.length, 18);
     local.writeUInt32LE(data.length, 22);
     local.writeUInt16LE(nameBytes.length, 26);
     local.writeUInt16LE(0, 28);
 
-    locals.push(local, nameBytes, data);
+    locals.push(local, nameBytes, payload);
 
     const central = Buffer.alloc(46);
     central.writeUInt32LE(0x02014b50, 0);
     central.writeUInt16LE(20, 4); // version made by
     central.writeUInt16LE(20, 6); // version needed
     central.writeUInt16LE(0x0800, 8);
-    central.writeUInt16LE(0, 10);
+    central.writeUInt16LE(method, 10);
     central.writeUInt16LE(time, 12);
     central.writeUInt16LE(date, 14);
     central.writeUInt32LE(checksum, 16);
-    central.writeUInt32LE(data.length, 20);
+    central.writeUInt32LE(payload.length, 20);
     central.writeUInt32LE(data.length, 24);
     central.writeUInt16LE(nameBytes.length, 28);
     central.writeUInt16LE(0, 30); // extra
@@ -84,7 +101,7 @@ export function createZip(entries: ZipEntry[], modified = new Date()): Buffer {
     central.writeUInt32LE(offset, 42);
 
     centrals.push(central, nameBytes);
-    offset += local.length + nameBytes.length + data.length;
+    offset += local.length + nameBytes.length + payload.length;
   }
 
   const centralDir = Buffer.concat(centrals);

@@ -46,6 +46,25 @@ describe('zip round trip', () => {
   it('rejects a file that is not a zip', () => {
     assert.throws(() => readZip(Buffer.from('not a zip at all, definitely not')), /not a valid/);
   });
+
+  it('compresses XML instead of storing it, so a document does not grow', () => {
+    // A realistic slice of Word XML: highly repetitive, compresses well.
+    const xml = `<w:p><w:r><w:t>${'The Landlord lets the Property to the Tenant. '.repeat(400)}</w:t></w:r></w:p>`;
+    const archive = createZip([{ name: 'word/document.xml', data: xml }]);
+
+    assert.ok(
+      archive.length < Buffer.byteLength(xml) / 2,
+      `expected compression: ${archive.length} bytes for ${Buffer.byteLength(xml)}`,
+    );
+    assert.equal(readZip(archive).get('word/document.xml')?.toString('utf8'), xml);
+  });
+
+  it('stores an entry that does not compress well', () => {
+    // Random bytes do not deflate; the writer must fall back to storing them.
+    const random = Buffer.from(Array.from({ length: 2048 }, (_, i) => (i * 37 + 11) % 251));
+    const archive = createZip([{ name: 'blob.bin', data: random }]);
+    assert.deepEqual([...(readZip(archive).get('blob.bin') ?? [])], [...random]);
+  });
 });
 
 describe('reading a Word document', () => {
