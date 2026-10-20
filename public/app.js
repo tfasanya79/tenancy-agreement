@@ -158,42 +158,66 @@ function renderStatus() {
 
 /* --------------------------------------------------------------- sidebar --- */
 
+/** Where a tenancy is in its life, in the order an agent thinks about them. */
+const LIFECYCLE_GROUPS = [
+  ['active', 'Active'],
+  ['upcoming', 'Starting soon'],
+  ['ending', 'Ending'],
+  ['ended', 'Ended'],
+];
+
+const LIFECYCLE_LABELS = {
+  upcoming: 'Upcoming',
+  active: 'Active',
+  ending: 'Ending',
+  ended: 'Ended',
+};
+
 function renderSidebar() {
   const list = $('#pack-list');
   $('#pack-count').textContent = String(state.packs.length);
   $('#sidebar-empty').hidden = state.packs.length > 0;
 
-  list.replaceChildren(
-    ...state.packs.map((pack) => {
-      const meta = [];
-      if (pack.errorCount > 0) meta.push(el('span', { class: 'badge badge-err' }, `${pack.errorCount} to fix`));
-      else if (pack.ready) meta.push(el('span', { class: 'badge badge-ok' }, 'Complete'));
-      else meta.push(el('span', { class: 'badge badge-warn' }, 'Incomplete'));
+  const item = (pack) => {
+    const meta = [];
+    if (pack.errorCount > 0) meta.push(el('span', { class: 'badge badge-warn' }, `${pack.errorCount} to look at`));
+    else if (pack.ready) meta.push(el('span', { class: 'badge badge-ok' }, 'Complete'));
+    else meta.push(el('span', { class: 'badge' }, 'In progress'));
 
-      if (pack.documentCount > 0) {
-        meta.push(el('span', { class: 'badge' }, `${pack.documentCount} doc${pack.documentCount === 1 ? '' : 's'}`));
-      }
+    if (pack.documentCount > 0) {
+      meta.push(el('span', { class: 'badge' }, `${pack.documentCount} doc${pack.documentCount === 1 ? '' : 's'}`));
+    }
 
-      return el(
-        'li',
-        {
-          class: `pack-item${pack.id === state.activeId ? ' is-active' : ''}`,
-          tabindex: '0',
-          role: 'button',
-          onClick: () => selectPack(pack.id),
-          onKeydown: (event) => {
-            if (event.key === 'Enter' || event.key === ' ') {
-              event.preventDefault();
-              selectPack(pack.id);
-            }
-          },
+    return el(
+      'li',
+      {
+        class: `pack-item${pack.id === state.activeId ? ' is-active' : ''}`,
+        tabindex: '0',
+        role: 'button',
+        onClick: () => selectPack(pack.id),
+        onKeydown: (event) => {
+          if (event.key === 'Enter' || event.key === ' ') {
+            event.preventDefault();
+            selectPack(pack.id);
+          }
         },
-        el('span', { class: 'pack-name' }, pack.tenantName || 'Unnamed tenant'),
-        el('span', { class: 'pack-sub' }, pack.propertyAddress || pack.reference),
-        el('div', { class: 'pack-meta' }, ...meta),
-      );
-    }),
-  );
+      },
+      el('span', { class: 'pack-name' }, pack.tenantName || 'Unnamed tenant'),
+      el('span', { class: 'pack-sub' }, pack.propertyAddress || pack.reference),
+      el('div', { class: 'pack-meta' }, ...meta),
+    );
+  };
+
+  // Grouped by where each tenancy sits, so the list reads like a portfolio.
+  const grouped = [];
+  for (const [id, label] of LIFECYCLE_GROUPS) {
+    const inGroup = state.packs.filter((pack) => (pack.lifecycle ?? 'upcoming') === id);
+    if (inGroup.length === 0) continue;
+    grouped.push(el('li', { class: 'pack-group-title', role: 'presentation' }, `${label} · ${inGroup.length}`));
+    grouped.push(...inGroup.map(item));
+  }
+
+  list.replaceChildren(...grouped);
 }
 
 async function refreshPacks() {
@@ -319,9 +343,32 @@ function renderMain() {
           { class: 'pack-meta', style: { marginTop: '.45rem' } },
           el('span', { class: 'badge' }, pack.reference),
           errorCount > 0
-            ? el('span', { class: 'badge badge-err' }, `${errorCount} to fix`)
-            : el('span', { class: 'badge badge-ok' }, 'Checks passed'),
+            ? el('span', { class: 'badge badge-warn' }, `${errorCount} to look at`)
+            : el('span', { class: 'badge badge-ok' }, 'Nothing outstanding'),
           el('span', { class: 'badge' }, `${documents.length} document${documents.length === 1 ? '' : 's'}`),
+          el(
+            'select',
+            {
+              class: 'lifecycle-select',
+              title: 'Where this tenancy is in its life',
+              onChange: async (event) => {
+                try {
+                  await api(`/api/packs/${pack.id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({ lifecycle: event.target.value }),
+                  });
+                  await reloadDetail();
+                  await refreshPacks();
+                  renderMain();
+                } catch (error) {
+                  toast(error.message, true);
+                }
+              },
+            },
+            ...['upcoming', 'active', 'ending', 'ended'].map((value) =>
+              el('option', { value, selected: (pack.lifecycle ?? 'upcoming') === value }, LIFECYCLE_LABELS[value]),
+            ),
+          ),
         ),
       ),
       el(
@@ -1614,24 +1661,80 @@ function renderPropertiesSection(data) {
   const sections = [];
 
   for (const property of data.properties) {
-    const roomRows = property.rooms.map((room) =>
-      el(
+    const roomRows = property.rooms.map((room) => {
+      const rentInput = el('input', {
+        type: 'text',
+        inputmode: 'decimal',
+        class: 'bo-inline',
+        value: room.rentAmount === null ? '' : String(room.rentAmount),
+        title: 'Rent',
+      });
+      const depositInput = el('input', {
+        type: 'text',
+        inputmode: 'decimal',
+        class: 'bo-inline',
+        value: room.depositAmount === null ? '' : String(room.depositAmount),
+        title: 'Deposit',
+      });
+      const statusSelect = el(
+        'select',
+        { class: 'bo-inline' },
+        el('option', { value: 'let', selected: room.status === 'let' }, 'Let'),
+        el('option', { value: 'available', selected: room.status !== 'let' }, 'Available'),
+      );
+
+      const toNumber = (text) => (text === '' ? null : Number(String(text).replace(/[^\d.]/g, '')));
+
+      return el(
         'div',
-        { class: 'bo-room' },
-        el('span', {}, room.roomNumber === '' ? 'Whole property' : room.roomNumber),
+        { class: 'bo-room bo-room-edit' },
+        el('span', { class: 'bo-room-name' }, room.roomNumber === '' ? 'Whole property' : room.roomNumber),
+        el('span', { class: 'bo-room-field' }, el('span', { class: 'bo-unit' }, '£'), rentInput),
+        el('span', { class: 'bo-room-field' }, el('span', { class: 'bo-unit' }, '£'), depositInput),
+        statusSelect,
         el(
-          'span',
-          { class: 'small' },
-          [
-            room.rentAmount === null ? null : `£${room.rentAmount}`,
-            room.status,
-            `${room.tenancyCount} tenanc${room.tenancyCount === 1 ? 'y' : 'ies'}`,
-          ]
-            .filter(Boolean)
-            .join(' · '),
+          'button',
+          {
+            class: 'btn btn-sm',
+            type: 'button',
+            onClick: async () => {
+              // These figures are shared. Say who they will reach before saving.
+              if (room.tenancyCount > 0) {
+                const plural = room.tenancyCount === 1 ? 'tenancy' : 'tenancies';
+                const sure = window.confirm(
+                  `This room is used by ${room.tenancyCount} ${plural}. Changing the rent or deposit here changes what those ${plural} inherit. Continue?`,
+                );
+                if (!sure) return;
+              }
+              try {
+                await api(`/api/backoffice/rooms/${room.id}`, {
+                  method: 'PATCH',
+                  body: JSON.stringify({
+                    rentAmount: toNumber(rentInput.value),
+                    depositAmount: toNumber(depositInput.value),
+                    status: statusSelect.value,
+                  }),
+                });
+                toast('Room updated.');
+                await loadBackOffice();
+                await refreshPacks();
+                renderMain();
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Save',
         ),
-      ),
-    );
+        room.tenancyCount > 0
+          ? el(
+              'span',
+              { class: 'bo-impact' },
+              `used by ${room.tenancyCount} tenanc${room.tenancyCount === 1 ? 'y' : 'ies'}`,
+            )
+          : null,
+      );
+    });
 
     const roomNumber = el('input', { type: 'text', placeholder: 'Room number' });
     const rent = el('input', { type: 'text', inputmode: 'decimal', placeholder: 'Rent £' });

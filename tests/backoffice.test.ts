@@ -141,6 +141,40 @@ describe('inheritance', () => {
   });
 });
 
+describe('shared values', () => {
+  it('knows how many tenancies inherit a room, so it can warn first', () => {
+    const { store, backOffice, landlord, property, room } = setup();
+
+    const first = store.createPack({ tenants: [{ full_name: 'Alex Morgan' }], 'tenancy.start_date': '2026-11-01' });
+    const second = store.createPack({ tenants: [{ full_name: 'Sam Okafor' }], 'tenancy.start_date': '2026-12-01' });
+    store.linkPack(first.id, { landlordId: landlord.id, propertyId: property.id, roomId: room.id });
+    store.linkPack(second.id, { landlordId: landlord.id, propertyId: property.id, roomId: room.id });
+
+    assert.equal(backOffice.countTenanciesUsing('room_id', room.id), 2);
+    assert.equal(store.tenanciesUsing('room_id', room.id).length, 2);
+
+    const summary = backOffice.roomSummary().find((entry) => entry.id === room.id);
+    assert.equal(summary?.tenancyCount, 2);
+    assert.match(summary?.propertyAddress ?? '', /14 Beech Road/);
+    store.close();
+  });
+
+  it('does not count a tenancy that has ended', () => {
+    const { store, backOffice, landlord, property, room } = setup();
+    const pack = store.createPack({ tenants: [{ full_name: 'Past Tenant' }], 'tenancy.start_date': '2025-01-01' });
+    store.linkPack(pack.id, {
+      landlordId: landlord.id,
+      propertyId: property.id,
+      roomId: room.id,
+      lifecycle: 'ended',
+    });
+
+    assert.equal(backOffice.countTenanciesUsing('room_id', room.id), 0, 'an ended tenancy is history, not a risk');
+    assert.equal(store.tenanciesUsing('room_id', room.id).length, 1, 'but it is still on record');
+    store.close();
+  });
+});
+
 describe('a prefilled tenancy produces a real document', () => {
   it('renders the inherited address, room and landlord into the agreement', async () => {
     const { store, backOffice, landlord, property, room } = setup();

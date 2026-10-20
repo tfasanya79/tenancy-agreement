@@ -116,6 +116,34 @@ describe('pack lifecycle', () => {
     assert.equal(response.json().pack.status, 'draft');
   });
 
+  it('moves a tenancy through its lifecycle', async () => {
+    const pack = await createPack();
+    const created = (await app.inject({ method: 'GET', url: `/api/packs/${pack.id}` })).json();
+    assert.equal(created.pack.lifecycle, 'upcoming', 'a new tenancy has not started yet');
+
+    for (const lifecycle of ['active', 'ending', 'ended']) {
+      const response = await app.inject({
+        method: 'PATCH',
+        url: `/api/packs/${pack.id}`,
+        payload: { lifecycle },
+      });
+      assert.equal(response.json().pack.lifecycle, lifecycle);
+    }
+
+    const listing = (await app.inject({ method: 'GET', url: '/api/packs' })).json();
+    assert.equal(listing.packs.find((item: { id: string }) => item.id === pack.id).lifecycle, 'ended');
+  });
+
+  it('ignores a lifecycle it does not recognise', async () => {
+    const pack = await createPack();
+    const response = await app.inject({
+      method: 'PATCH',
+      url: `/api/packs/${pack.id}`,
+      payload: { lifecycle: 'banana' },
+    });
+    assert.equal(response.json().pack.lifecycle, 'upcoming');
+  });
+
   it('adds and removes notes', async () => {
     const pack = await createPack();
     const added = await app.inject({

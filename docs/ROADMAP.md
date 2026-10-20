@@ -47,8 +47,8 @@ derived.
       confirmed, never silently merged.
 - [x] The tenancy form prefilled by inheritance, with provenance shown on every
       inherited field ("from Room 2"), and an explicit way to override.
-- [ ] Editing a shared value asks before it changes existing tenancies.
-- [ ] The tenancy lifecycle screens: upcoming, active, ending, ended — "manage tenants" means
+- [x] Editing a shared value asks before it changes existing tenancies.
+- [x] The tenancy lifecycle screens: upcoming, active, ending, ended — "manage tenants" means
       the whole life of a tenancy, not just the move-in pack.
 - [x] Advisories that never block. Gas safety, EICR, EPC and alarm records are not in
       their documents, so they are quiet notes, never requirements.

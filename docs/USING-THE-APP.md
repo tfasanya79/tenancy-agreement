@@ -103,6 +103,8 @@ to the template file — see [docs/TEMPLATES.md](TEMPLATES.md).
 
 ### Details
 
+The pack list on the left is grouped by where each tenancy sits — **Active**, **Starting soon**, **Ending**, **Ended** — and the dropdown next to the pack reference moves it between them.
+
 Everything the pack knows, in a form. Correct anything here, any time. Blank
 fields are simply blank; the app tells you which ones are essential.
 

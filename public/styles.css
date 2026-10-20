@@ -626,3 +626,40 @@ input.is-inherited, select.is-inherited, textarea.is-inherited {
   .topbar { padding: .7rem .9rem; }
   .brand p { display: none; }
 }
+
+.pack-group-title {
+  list-style: none;
+  margin: .7rem .2rem .25rem;
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .07em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.pack-group-title:first-child { margin-top: .2rem; }
+
+.lifecycle-select {
+  font-size: .78rem;
+  padding: .22rem .45rem;
+  border-radius: 6px;
+  border: 1px solid var(--line-strong);
+  background: #fff;
+  color: var(--ink-soft);
+  width: auto;
+}
+.bo-room-edit {
+  display: flex; align-items: center; gap: .4rem; flex-wrap: wrap;
+}
+.bo-room-edit .bo-room-name { flex: 1 1 90px; font-weight: 500; }
+.bo-room-field { display: inline-flex; align-items: center; gap: .1rem; }
+.bo-unit { font-size: .78rem; color: var(--muted); }
+.bo-inline {
+  width: 84px;
+  font-size: .8rem;
+  padding: .22rem .35rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+}
+select.bo-inline { width: auto; }
+.bo-impact { font-size: .72rem; color: var(--muted); font-style: italic; }

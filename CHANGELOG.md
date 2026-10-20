@@ -8,6 +8,30 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — the tenancy lifecycle, and a warning before a shared change
+
+M1 is complete. The last two pieces:
+
+**Lifecycle.** Every tenancy is `upcoming`, `active`, `ending` or `ended`. A dropdown
+next to the pack reference moves it, and the pack list is now grouped by where each
+tenancy sits — *Active · Starting soon · Ending · Ended* — so the list reads like a
+portfolio rather than an inbox.
+
+**Shared values.** Rooms are now editable in the back office, and changing one says
+who it reaches first: *"This room is used by 2 tenancies. Changing the rent or deposit
+here changes what those tenancies inherit. Continue?"* Verified end to end — changing
+a room from £1,450 to £1,495 moves both tenancies, and an override on one of them
+holds at £1,500 while the other follows the room.
+
+`countTenanciesUsing()` ignores ended tenancies: they are history, not a risk. The
+permanent record is still there.
+
+Also: badges say "to look at" rather than "to fix", and a complete pack reads "Nothing
+outstanding".
+
+220 tests. `pnpm docs:check` clean.
+
+
 ### Changed — the app asks, it does not police
 
 The client's steer, stated plainly: this is their software, not their regulator. The

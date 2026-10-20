@@ -25,9 +25,7 @@ document set in an existing room. `tests/backoffice.test.ts` asserts exactly tha
 including that the rendered agreement contains the inherited address and the room's
 rent.
 
-Not yet built from this design: the full lifecycle screens (upcoming → active →
-ending → ended), editing a shared value with a "this affects 3 tenancies" prompt, and
-the cross-pack dashboard.
+Also built: the **tenancy lifecycle** (upcoming → active → ending → ended), with the pack list grouped by it, and an **impact warning** before a shared change — editing a room's rent tells you how many tenancies inherit it and asks before applying.
 
 ---
 ## The problem with the current shape
