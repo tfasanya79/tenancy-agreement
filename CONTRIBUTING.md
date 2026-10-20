@@ -60,7 +60,7 @@ Keep the legal substance of a clause when you change its wording. If you believe
 
 ### 2. Add a new document type
 
-1. Copy an existing template and rename it, for example `templates/apt-agreement.md` → `templates/renewal-letter.md`.
+1. Copy an existing template and rename it — for example, copy `templates/apt-agreement.md` to a new file in the same folder called `renewal-letter.md`.
 2. Give it a **new, unique `id`** in the front matter (a duplicate id is skipped with a warning), and set `title`, `category` and `jurisdiction`.
 3. **List the fields it needs in `required`.** This is what drives the "missing details" warnings and what blocks generation:
 
@@ -181,7 +181,8 @@ pnpm test
   ```
 
 - Mention the Node version you tested on if it is not 24.
-- No generated files: do not commit `samples/`, `data/`, `node_modules/` or anything under `samples/.build/`. `.gitignore` already covers them.
+- No generated files: do not commit `samples/`, `data/`, `node_modules/`, or the temporary build folder that `pnpm sample` creates. `.gitignore` already covers them.
+- Run `pnpm docs:check` if you changed anything the docs describe. It fails when a documented command, path or test count no longer matches the code.
 
 ## Legal-content contributions
 

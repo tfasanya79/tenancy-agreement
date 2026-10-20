@@ -18,7 +18,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 18 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 141 tests on `node:test` |
+| Tests | `tests/` | 187 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -273,11 +273,52 @@ data directory.
 | Add or change an endpoint | `src/app.ts` |
 | Change the interface | `public/app.js`, `public/styles.css` |
 | Change the ZIP contents sheet | `src/docs/packSummary.ts` |
+| Change what the audit flags | `src/docs/templateAudit.ts` |
+| Change how a document's values are substituted | `src/docs/docxFill.ts` |
+| Change how a value is formatted (`£1,450`, `1 November 2026`) | `formatLike()` in `src/docs/docxFill.ts` |
+| Change the derived first payment date | `paymentDateFor()` in `src/docs/fields.ts` |
 | Change environment variables | `src/config.ts` **and** `.env.example` |
 
 After changing anything in `src/docs/` or `templates/`, run `pnpm sample` — it
 renders every document with a complete fictional pack, which catches most breakage
-faster than reading the diff.
+faster than reading the diff. After changing anything a document describes, run
+`pnpm docs:check`.
+
+---
+
+## Using an agency's own document
+
+Two modules sit behind the "use our document, not yours" feature. Neither is wired
+into the interface yet; both are finished and tested.
+
+**`src/docs/templateAudit.ts` — is their document still lawful?**
+`auditDocumentText(text)` is pattern matching, not a model, so the same document
+always gives the same answer. It flags an agreement that still calls itself an
+assured shorthold tenancy, refers to section 21 or section 19A, creates a fixed
+term, or reviews rent by "a reasonable percentage". It understands negation —
+"section 21 is abolished" is not a problem — and scope-checks the absence rules, so
+a deposit form is not asked why it has no pets clause.
+
+**`src/docs/docxFill.ts` — substitute values, keep everything else.**
+A `.docx` is a ZIP of XML, so `readZip()` opens it, `replaceInDocumentXml()`
+rewrites the paragraphs that contain a value, and `createZip()` closes it again.
+
+Three details make this work in practice:
+
+1. **Word splits sentences into runs.** `£980` may be `£9` in one `<w:t>` and `80` in
+   another. The code rebuilds each paragraph's plain text, finds the value there,
+   then maps the edit back onto the real runs, keeping the first run's formatting
+   and adding `xml:space="preserve"` where spaces matter.
+2. **The new value follows the document's own style.** `formatLike()` turns `1450`
+   into `£1,450` when the original said `£980`, and `2026-11-01` into
+   `1 November 2026`, `1st November 2026` or `01/11/2026` to match the sample.
+3. **The same old value can appear in two places.** A tenancy starting 1 November
+   and an inventory agreed that day both read `30 October 2026` in last year's
+   paperwork. A `near` hint restricts a substitution to the paragraph containing
+   identifying words, and targeted links are applied before general ones.
+
+Values that are not found are reported, never silently dropped. `pnpm demo:fill`
+exercises the whole path with a document shaped like a letting agency's.
 
 ---
 
@@ -294,6 +335,8 @@ faster than reading the diff.
 | `render.test.ts` | Registry loading and warnings, rendering, file generation, the store, the rule set |
 | `api.test.ts` | Every route via `fastify.inject`, including the SSE stream and ZIP download |
 | `agent.test.ts` | DeepSeek client (errors, retries, tool parsing), each tool, the loop, the prompt |
+| `audit.test.ts` | The agreement audit, including a guard that all nine shipped templates pass it |
+| `docxFill.test.ts` | ZIP round trip, reading a `.docx`, substituting values across split runs, formatting preservation, and targeting an ambiguous value |
 
 Tests never touch the project's real `data/` folder — `tests/helpers.ts` hands out
 temp directories. `--test-isolation=none` runs the files in one process, which is

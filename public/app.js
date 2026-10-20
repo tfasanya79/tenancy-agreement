@@ -406,6 +406,12 @@ function renderAssistant() {
   }
 
   for (const message of messages) {
+    // Never render an empty bubble: a stream that produced no text (or a turn
+    // still in flight) should leave nothing behind in the transcript.
+    const text = String(message.text ?? '').trim();
+    const hasTrace = Array.isArray(message.trace) && message.trace.length > 0;
+    if (text === '' && !(message.role !== 'user' && hasTrace)) continue;
+
     if (message.role === 'user') {
       log.append(
         el(

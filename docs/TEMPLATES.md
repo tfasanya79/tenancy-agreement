@@ -224,6 +224,7 @@ rejected by the app (and reported as a template warning at startup).
 | Key | Type | Notes |
 | --- | --- | --- |
 | `property.address_line1` `property.address_line2` `property.city` `property.postcode` | text | |
+| `property.room_number` | text | For room-by-room lettings, e.g. "Room 2". Leave blank for a whole property |
 | `property.property_type` | select | Flat · House · Maisonette · Bungalow · Studio · Other |
 | `property.bedrooms` | number | |
 | `property.furnished_status` | select | Furnished · Part-furnished · Unfurnished |
@@ -237,6 +238,7 @@ rejected by the app (and reported as a template warning at startup).
 | Key | Type | Notes |
 | --- | --- | --- |
 | `tenancy.start_date` | date | |
+| `tenancy.payment_date` | date | **Derived** — the day before the start date. Supply it only to override |
 | `tenancy.rent_amount` | money | |
 | `tenancy.rent_frequency` | select | Monthly · Weekly · Fortnightly |
 | `tenancy.rent_due_day` | text | e.g. "1st of each month" |
@@ -260,6 +262,12 @@ rejected by the app (and reported as a template warning at startup).
 | `tenancy.deposit_scheme` | select | DPS · MyDeposits · TDS · Not yet protected |
 | `tenancy.deposit_scheme_ref` | text | |
 | `tenancy.deposit_received_date` | date | Starts the 30-day clock |
+
+### Inventory & condition
+
+| Key | Type | Notes |
+| --- | --- | --- |
+| `inventory.scheduled_date` | date | The date the schedule of condition and inventory is agreed |
 
 ### Landlord, agent and guarantor
 

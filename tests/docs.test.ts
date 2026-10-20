@@ -144,6 +144,30 @@ describe('compliance checks', () => {
     assert.deepEqual(dates, [...dates].sort());
   });
 
+  it('warns when the client money protection field does not hold a scheme name', () => {
+    const fields = completeFields();
+    fields['agent.client_money_scheme'] = '£233';
+    const report = runComplianceChecks(fields, { today: TODAY });
+    const finding = report.findings.find((item) => item.id === 'agency-cmp-suspect');
+    assert.ok(finding, 'a stray amount must not pass as a scheme name');
+    assert.equal(finding?.severity, 'warning');
+    assert.match(finding?.detail ?? '', /£233/);
+  });
+
+  it('accepts a real scheme name', () => {
+    const fields = completeFields();
+    fields['agent.client_money_scheme'] = 'Propertymark Client Money Protection';
+    fields['agent.redress_scheme'] = 'The Property Ombudsman';
+    const report = runComplianceChecks(fields, { today: TODAY });
+    assert.equal(report.findings.some((item) => item.id.endsWith('-suspect')), false);
+  });
+
+  it('warns when the redress scheme field holds a number', () => {
+    const fields = completeFields();
+    fields['agent.redress_scheme'] = '01234 567890';
+    assert.ok(ids(runComplianceChecks(fields, { today: TODAY })).includes('agency-redress-suspect'));
+  });
+
   it('reports missing essentials as errors so generation is blocked', () => {
     const report = runComplianceChecks({}, { today: TODAY });
     assert.ok(report.counts.error > 0);

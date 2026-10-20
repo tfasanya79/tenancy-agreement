@@ -385,6 +385,34 @@ export function runComplianceChecks(
     });
   }
 
+  // A field can be filled in and still be wrong. A currency amount or a stray
+  // number in a "scheme name" box would print on every agreement.
+  const looksLikeName = (value: string) => /[a-z]{3,}/i.test(value) && !/^[£$€]?\s*\d+([.,]\d+)?$/.test(value.trim());
+
+  const cmp = asText(fields, 'agent.client_money_scheme');
+  if (cmp !== '' && !looksLikeName(cmp)) {
+    add({
+      id: 'agency-cmp-suspect',
+      severity: 'warning',
+      title: 'Client money protection does not look like a scheme name',
+      detail: `It currently reads “${cmp}”. This appears on every agreement you produce, so enter the scheme’s name — for example “Propertymark Client Money Protection” or “UKALA Client Money Protection”.`,
+      fields: ['agent.client_money_scheme'],
+      ruleId: 'client-money',
+    });
+  }
+
+  const redress = asText(fields, 'agent.redress_scheme');
+  if (redress !== '' && !looksLikeName(redress)) {
+    add({
+      id: 'agency-redress-suspect',
+      severity: 'warning',
+      title: 'Redress scheme does not look like a scheme name',
+      detail: `It currently reads “${redress}”. Enter the scheme’s name — for example “The Property Ombudsman” or “Property Redress Scheme”.`,
+      fields: ['agent.redress_scheme'],
+      ruleId: 'client-money',
+    });
+  }
+
   // --- Wording checks ------------------------------------------------------
   const notice = asText(fields, 'tenancy.notice_period_tenant');
   if (notice !== '' && !/\b2\b|two/i.test(notice)) {

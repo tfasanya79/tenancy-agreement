@@ -108,8 +108,14 @@ fields are simply blank; the app tells you which ones are essential.
 
 - **Tenants** — one card per person. Use **Add another tenant** for joint
   tenancies; they appear in order on the agreement.
+- **The property** — the address, and the **room number** if you let a house room
+  by room. Leave the room blank for a whole property.
+- **The tenancy** — the start date and the rent. The **first payment date** fills
+  itself in as the day before the start date, then monthly; change it only if an
+  agreement says something different.
 - **Deposit** — the amount, which scheme, the reference, and the date you received
   it. That date starts the 30-day clock.
+- **Inventory & condition** — the date the schedule of condition was agreed.
 - **Safety & compliance** — the certificate dates. You cannot produce a defensible
   pack without them, and the app will tell you if one is out of date.
 - **Guarantor** — fill it in only if there is one. The guarantor deed appears in

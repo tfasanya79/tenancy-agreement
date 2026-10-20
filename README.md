@@ -396,16 +396,19 @@ tenancy-agreement/
 │   │   ├── registry.ts        loads templates/, works out what is missing
 │   │   ├── compliance.ts      the arithmetic checks
 │   │   ├── generate.ts        renders everything and writes the files
-│   │   └── packSummary.ts     the contents sheet in the ZIP
+│   │   ├── packSummary.ts     the contents sheet in the ZIP
+│   │   ├── templateAudit.ts   checks an uploaded agreement against the law
+│   │   └── docxFill.ts        fills an agency's own .docx without losing formatting
 │   ├── agent/
 │   │   ├── deepseek.ts        API client with retries
 │   │   ├── loop.ts            the tool-calling loop
 │   │   ├── tools.ts           the eight tools, and their guards
 │   │   └── prompts.ts         the system prompt
+│   ├── util/zip.ts            reads and writes ZIP (Word files are ZIPs)
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     141 tests
+├── tests/                     187 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -422,9 +425,11 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 141 tests |
+| `pnpm test` | Run the 187 tests |
 | `pnpm typecheck` | TypeScript, no build |
+| `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm sample` | Rebuild `samples/` from the templates |
+| `pnpm demo:fill` | Show the "use our own Word document" engine filling an example agreement |
 | `pnpm rules` | Regenerate `docs/RULES.md` from the rule set |
 
 ---
@@ -510,21 +515,25 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 ## Status and roadmap
 
-**v1.0.0** — working and tested.
+**v1.0.0** — working and tested, with the "bring your own document" work in progress.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 141 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 187 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
-| Live DeepSeek call | ⚠️ needs your key — the transport, retries and tool-calling loop are covered by tests, but the first real call is yours to make. `pnpm doctor` verifies the key and endpoint |
+| Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
+| Room-by-room lettings | ✅ `property.room_number`, first payment date derived from the start date |
+| Agreement audit — is an uploaded document still current? | ✅ flags assured shorthold, section 21, fixed terms and vague rent reviews |
+| Filling an agency's own `.docx` without losing its formatting | ✅ engine and tests; `pnpm demo:fill` shows it working |
+| Upload screen for a custom document | 🚧 next — engine and audit are ready, the interface is not wired up yet |
 | Accounts, multi-user | ✗ by design |
 | Sending email, e-signature | ✗ out of scope — see [docs/TOOLBOX.md](docs/TOOLBOX.md) |
 
-Planned next, roughly in order: calendar reminders (`.ics`) exported from the
-deadline list · a per-pack activity history view · optional PDF output when
-LibreOffice is present · a template-preview screen with sample data · tenancy
-renewal and end-of-tenancy packs.
+Planned next, roughly in order: the upload → confirm-the-links → fill screen ·
+calendar reminders (`.ics`) exported from the deadline list · a cross-pack
+dashboard of upcoming deadlines · a per-pack activity history view · optional PDF
+output when LibreOffice is present · tenancy renewal and end-of-tenancy packs.
 
 ---
 
@@ -536,7 +545,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 141 tests
+pnpm test        # 187 tests
 pnpm typecheck
 ```
 
