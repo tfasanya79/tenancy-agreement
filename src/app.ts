@@ -28,6 +28,14 @@ import { buildPackSummaryText, packSummaryView } from './docs/packSummary.ts';
 import { BackOffice } from './backoffice/entities.ts';
 import { contextFor, effectiveFields } from './backoffice/context.ts';
 import { applyMigration, previewMigration } from './backoffice/migrate.ts';
+import { CustomTemplateStore } from './backoffice/customTemplates.ts';
+import { buildReplacements, extractDocxText, fillDocx, fillDocxBlanks, formatLike, resolveFieldPath } from './docs/docxFill.ts';
+import { proposeLinks } from './docs/linkProposal.ts';
+import { auditDocumentText } from './docs/templateAudit.ts';
+import { getField } from './docs/fields.ts';
+import { formatDateStyle } from './docs/template.ts';
+import { createHash } from 'node:crypto';
+import { writeFile } from 'node:fs/promises';
 
 export type AppDeps = {
   config: AppConfig;
@@ -56,6 +64,23 @@ export function agencyFallback(config: AppConfig): Record<string, unknown> {
   return out;
 }
 
+/** Present a detail the way its type deserves: money in pounds, dates in words. */
+function formatForField(key: string, value: unknown): string {
+  if (value === null || value === undefined) return '';
+  const def = getField(key);
+  if (def?.type === 'money') return formatLike('£1', value);
+  if (def?.type === 'date') return formatDateStyle(value, 'long');
+  return String(value);
+}
+
+function slugify(value: string): string {
+  return value
+    .toLowerCase()
+    .replace(/[^a-z0-9]+/g, '-')
+    .replace(/^-+|-+$/g, '')
+    .slice(0, 50);
+}
+
 function notFound(reply: FastifyReply, message: string) {
   return reply.code(404).send({ error: message });
 }
@@ -78,7 +103,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   const app = Fastify({
     logger: process.env['NODE_ENV'] === 'production' ? { level: 'info' } : false,
-    bodyLimit: 2 * 1024 * 1024,
+    bodyLimit: 16 * 1024 * 1024, // room for a base64 .docx upload
   });
 
   const client =
@@ -91,6 +116,7 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // The back office shares the same SQLite file and connection as the packs.
   const backOffice = new BackOffice(store.handle);
+  const customTemplates = new CustomTemplateStore(store.handle, config.dataDir);
 
   /**
    * Agency details for a pack: settings saved in the app win, then `.env`.
@@ -330,6 +356,151 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       return { applied: false, plan };
     }
     return { applied: true, result: applyMigration(plan, backOffice, store), plan };
+  });
+
+  // --- the agency's own documents -----------------------------------------
+
+  app.get('/api/custom-templates', async () => ({ templates: customTemplates.list() }));
+
+  /**
+   * Accept one of the agency's own `.docx` files.
+   *
+   * The file arrives base64-encoded in JSON rather than as a multipart upload: it
+   * keeps the server free of another dependency, and the browser can send it with
+   * the same `fetch` it uses everywhere else.
+   */
+  app.post('/api/custom-templates', async (request, reply) => {
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const data = typeof body['data'] === 'string' ? body['data'] : '';
+    if (data === '') return badRequest(reply, 'No file arrived.');
+
+    const bytes = Buffer.from(data, 'base64');
+    if (bytes.byteLength === 0) return badRequest(reply, 'That file is empty.');
+
+    let text: string;
+    try {
+      text = extractDocxText(bytes).text;
+    } catch {
+      return badRequest(reply, 'That is not a Word file. Upload a .docx — if you only have a PDF, save it as Word first.');
+    }
+
+    const audit = auditDocumentText(text);
+    const proposal = proposeLinks(text);
+    const fileName = typeof body['fileName'] === 'string' ? body['fileName'] : 'document.docx';
+    const name =
+      typeof body['name'] === 'string' && body['name'].trim() !== ''
+        ? body['name'].trim()
+        : fileName.replace(/\.docx$/i, '');
+
+    const template = await customTemplates.create({
+      name,
+      fileName,
+      bytes,
+      fillMode: proposal.mode,
+      blankFields: [],
+      links:
+        proposal.mode === 'values'
+          ? proposal.links.map((link) => ({
+              sample: link.sample,
+              field: link.field,
+              hint: link.hint,
+              kind: link.kind,
+              confidence: link.confidence,
+            }))
+          : [],
+      audit,
+      wordCount: proposal.wordCount,
+    });
+
+    return reply.code(201).send({ template, proposal });
+  });
+
+  app.patch('/api/custom-templates/:id', async (request, reply) => {
+    const id = (request.params as Record<string, string>)['id'] ?? '';
+    if (customTemplates.get(id) === null) return notFound(reply, 'That document no longer exists.');
+
+    const body = (request.body ?? {}) as Record<string, unknown>;
+    const mode = body['fillMode'];
+    return customTemplates.update(id, {
+      ...(typeof body['name'] === 'string' ? { name: body['name'] } : {}),
+      ...(mode === 'values' || mode === 'blanks' ? { fillMode: mode } : {}),
+      ...(Array.isArray(body['blankFields'])
+        ? { blankFields: body['blankFields'].filter((item): item is string => typeof item === 'string') }
+        : {}),
+      ...(Array.isArray(body['links'])
+        ? {
+            links: body['links']
+              .filter((item): item is Record<string, unknown> => typeof item === 'object' && item !== null)
+              .map((item) => ({
+                sample: String(item['sample'] ?? ''),
+                field: String(item['field'] ?? ''),
+                ...(typeof item['hint'] === 'string' ? { hint: item['hint'] } : {}),
+              }))
+              .filter((link) => link.sample !== ''),
+          }
+        : {}),
+    });
+  });
+
+  app.delete('/api/custom-templates/:id', async (request, reply) => {
+    const id = (request.params as Record<string, string>)['id'] ?? '';
+    if (customTemplates.get(id) === null) return notFound(reply, 'That document no longer exists.');
+    customTemplates.delete(id);
+    return reply.code(204).send();
+  });
+
+  /** Produce the agency's own document, filled for this tenant. */
+  app.post('/api/packs/:id/fill/:templateId', async (request, reply) => {
+    const pack = store.findPack(paramId(request));
+    if (pack === null) return notFound(reply, 'That pack no longer exists.');
+
+    const templateId = (request.params as Record<string, string>)['templateId'] ?? '';
+    const template = customTemplates.get(templateId);
+    if (template === null) return notFound(reply, 'That document no longer exists.');
+
+    const fields = effectiveFor(pack);
+    const original = await customTemplates.originalFile(template);
+    const fileName = `custom-${slugify(template.name) || template.id}.docx`;
+    const target = join(store.documentDir(pack.id), fileName);
+
+    let bytes: Buffer;
+    let report: { filled: number; remaining: number; notFound: string[] };
+
+    if (template.fillMode === 'blanks') {
+      const values = template.blankFields.map((key) => formatForField(key, resolveFieldPath(fields, key)));
+      const result = fillDocxBlanks(original, values);
+      bytes = result.buffer;
+      report = { filled: result.filled, remaining: result.remaining, notFound: [] };
+    } else {
+      const replacements = buildReplacements(
+        fields,
+        template.links.map((link) => ({ field: link.field, sample: link.sample, label: link.field })),
+      );
+      const result = fillDocx(original, replacements);
+      bytes = result.buffer;
+      report = {
+        filled: result.applied.length,
+        remaining: 0,
+        notFound: result.notFound.map((item) => item.label ?? item.find),
+      };
+    }
+
+    await writeFile(target, bytes);
+
+    const [saved] = store.addDocuments(pack.id, [
+      {
+        templateId: `custom:${template.id}`,
+        title: template.name,
+        docxPath: join('documents', pack.id, fileName).replace(/\\/g, '/'),
+        htmlPath: null,
+        mdPath: null,
+        checksum: createHash('sha256').update(bytes).digest('hex').slice(0, 16),
+        byteSize: bytes.byteLength,
+        generatedAt: new Date().toISOString(),
+      },
+    ]);
+
+    return { document: saved, report, pack: packDetail(store.getPack(pack.id)) };
   });
 
   // --- packs --------------------------------------------------------------

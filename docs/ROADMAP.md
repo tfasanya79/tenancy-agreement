@@ -74,22 +74,16 @@ typed details, and no existing pack has lost a value.
 
 **What is left**
 
-- [ ] Storage for uploaded documents: a `templates_custom` table, files under
-      `data/uploads/`, one row per uploaded document.
-- [ ] `POST /api/uploads` — accept a `.docx`, extract its text, audit it, propose links.
-- [ ] Link proposal: the assistant reads the document and suggests, for each of the
-      agreed details, the exact text currently in the file. Deterministic verification
-      that every proposed `find` string really occurs, so a bad suggestion is rejected
-      rather than silently skipped.
-- [ ] Review screen: a table of "this text → this detail", with a preview of the filled
-      result before it is saved. One minute, once.
-- [ ] **Two fill modes**, because the documents differ:
-      *value replacement* for the contracts (the previous tenant's details are typed in),
-      *blank filling* for the holding deposit form (it has `________` placeholders).
-- [ ] Fill and download: choose the uploaded document, fill from the pack, get a `.docx`
-      that is byte-identical apart from the substitutions.
-- [ ] Wire the audit into the upload: a document that still says "assured shorthold" or
-      "section 21" is shown as a warning before it is ever used.
+- [x] Storage for uploaded documents: a `custom_templates` table, files under `data/uploads/`, one row per uploaded document.
+- [x] `POST /api/custom-templates` — accept a `.docx`, extract its text, audit it, propose links.
+- [x] Link proposal: the variable parts are recognised by shape and by the words nearest to them, and anything ambiguous comes back blank for a human to decide.
+- [x] Review screen: a table of "this text → this detail", with anything undecided marked "choose".
+- [x] **Two fill modes**: *value replacement* for the contracts, *blank filling* for the holding deposit form.
+- [x] Fill and download: choose the uploaded document, fill from the pack, get a `.docx` that is identical apart from the substitutions.
+- [x] The audit runs at upload: anything that still says "assured shorthold" or "section 21" is shown before the document is used.
+
+**Done:** the client's own room-only contract and holding deposit form both fill from a
+pack, with formatting intact, and their legal defects are reported at upload time.
 
 **Done when:** a pack produces a filled copy of the client's own room-only contract and of
 their holding deposit form, with formatting intact, and the documents' legal defects are

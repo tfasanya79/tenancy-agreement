@@ -663,3 +663,33 @@ input.is-inherited, select.is-inherited, textarea.is-inherited {
 }
 select.bo-inline { width: auto; }
 .bo-impact { font-size: .72rem; color: var(--muted); font-style: italic; }
+/* --- mapping their document's values --------------------------------------- */
+
+.map-row {
+  display: flex; align-items: center; gap: .5rem;
+  padding: .3rem 0;
+  border-top: 1px solid var(--line);
+}
+.map-row:first-of-type { border-top: 0; }
+.map-sample {
+  flex: 1 1 140px;
+  min-width: 0;
+  font-family: ui-monospace, 'Cascadia Mono', Consolas, monospace;
+  font-size: .76rem;
+  color: var(--ink-soft);
+  background: var(--sand);
+  border-radius: 4px;
+  padding: .22rem .4rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.field-map {
+  flex: 1 1 180px;
+  font-size: .8rem;
+  padding: .26rem .4rem;
+  border: 1px solid var(--line-strong);
+  border-radius: 6px;
+  background: #fff;
+}
+input[type="file"] { font-size: .82rem; }

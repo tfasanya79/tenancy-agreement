@@ -413,7 +413,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     220 tests
+├── tests/                     232 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -430,7 +430,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 220 tests |
+| `pnpm test` | Run the 232 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm sample` | Rebuild `samples/` from the templates |
@@ -528,7 +528,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 220 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 232 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
@@ -542,7 +542,8 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | Proofreading a document for internal contradictions | ✅ a weekday that does not match its date, two different rent due days, a fixed late-payment fee, a mistyped ordinal |
 | Repairing an agency's own contracts | ✅ `pnpm repair:contracts` rewrites the defective clauses in place, keeps the layout, and logs every change for sign-off |
 | Filling an agency's own `.docx` without losing its formatting | ✅ engine and tests; `pnpm demo:fill` shows it working |
-| Upload screen for a custom document | 🚧 next — engine and audit are ready, the interface is not wired up yet |
+| Upload screen for a custom document | ✅ Back office → Our documents: upload, review the mapping, then fill it per tenant |
+| Recognising a document's variable parts | ✅ by shape and by the nearest explaining words; anything ambiguous is marked ''choose'' rather than guessed |
 | Accounts, multi-user | ✗ by design |
 | Sending email, e-signature | ✗ out of scope — see [docs/TOOLBOX.md](docs/TOOLBOX.md) |
 
@@ -561,7 +562,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 220 tests
+pnpm test        # 232 tests
 pnpm typecheck
 ```
 

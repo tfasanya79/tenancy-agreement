@@ -480,3 +480,21 @@ The records a tenancy inherits from. All of these are plain JSON; errors come ba
 `lifecycle` (`upcoming`, `active`, `ending`, `ended`) as well as `fields` and `status`.
 Sending only the fields the user actually typed leaves everything else inherited — an
 empty string means "go back to the inherited value".
+---
+
+## Your own documents
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/api/custom-templates` | Everything uploaded, with its audit and its mapping |
+| `POST` | `/api/custom-templates` | Upload one. Body: `{ name, fileName, data }` where `data` is the `.docx` base64-encoded. Returns the stored template **and** the proposal: `{ mode, links, blankCount, wordCount }` |
+| `PATCH` | `/api/custom-templates/:id` | Save the mapping: `{ fillMode, links: [{ sample, field }], blankFields: [field, …] }` |
+| `DELETE` | `/api/custom-templates/:id` | Remove it, and the stored original |
+| `POST` | `/api/packs/:id/fill/:templateId` | Produce it for this tenancy. Returns `{ document, report, pack }`, where `report` is `{ filled, remaining, notFound }` |
+
+Files arrive base64-encoded in JSON rather than as a multipart upload: it keeps the
+server free of another dependency and lets the browser use the same `fetch` as
+everywhere else. The body limit is 16 MB.
+
+A link whose `field` is empty is a value the app would not guess. It is stored so the
+agent can come back to it, and it is skipped when filling.

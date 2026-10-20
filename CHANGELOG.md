@@ -8,6 +8,39 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — M2: use their own documents
+
+Upload a `.docx` and the app fills it for each tenant, in their own layout. The
+original is never rewritten: every fill makes a new copy.
+
+- **Back office → Our documents**: upload, see the audit, review the mapping, save.
+- **Recognising the variable parts** (`src/docs/linkProposal.ts`). Shape for the
+  obvious ones — postcodes, emails, money, dates, room references — and the words
+  *nearest* to each value to decide which detail it is. Deliberately timid: anything
+  ambiguous comes back blank and marked **choose**, because a confident wrong mapping
+  is easy to accept without reading.
+  - Two findings from testing against the client's real contract drove this. An earlier
+    version mapped `£628` to the *deposit* because "deposit" appeared later in the same
+    paragraph, and would have replaced the deposit scheme's own email address with the
+    tenant's. Both are now refused: a fee is not the rent, and a scheme address is not a
+    tenant, however close the words sit.
+  - Two values may never claim the same detail; the second is marked for a human.
+- **Two fill modes**: *value replacement* for the contracts, *blank filling* in
+  document order for the holding deposit form.
+- **Fill for this tenant** on a pack's Documents tab, producing a `.docx` download.
+- The audit runs at upload, so a document that still says "assured shorthold" or
+  "section 21" is flagged before it is ever used.
+
+Verified against the documents in `received from the client/`: the room-only contract
+fills four values with the old tenant's name and rent gone and the scheme's email
+untouched; the holding deposit form fills six blanks with the tenant name, rent and
+agency name.
+
+232 tests, including 12 for the proposal engine and one for each fill mode.
+
+Also: the confirmation dialog reads plainly ("Carry on and generate"), and every finished document now shows Word only, since an uploaded document has no print view.
+
+
 ### Added — the tenancy lifecycle, and a warning before a shared change
 
 M1 is complete. The last two pieces:

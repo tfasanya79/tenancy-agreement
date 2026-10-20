@@ -113,17 +113,19 @@ async function api(path, options = {}) {
 
 async function boot() {
   try {
-    const [config, fields, templates, packs] = await Promise.all([
+    const [config, fields, templates, packs, custom] = await Promise.all([
       api('/api/config'),
       api('/api/fields'),
       api('/api/templates'),
       api('/api/packs'),
+      api('/api/custom-templates'),
     ]);
     state.config = config;
     state.groups = fields.groups;
     state.fields = fields.fields;
     state.templates = templates.templates;
     state.packs = packs.packs;
+    state.customTemplates = custom.templates ?? [];
 
     renderStatus();
     renderSidebar();
@@ -1180,7 +1182,9 @@ function renderDocuments() {
                 { class: 'btn btn-sm', href: `/api/documents/${document.id}/download?format=docx` },
                 'Word',
               ),
-              el(
+              document.htmlPath === null
+                ? el('span', { class: 'small' }, 'Word only')
+                : el(
                 'button',
                 {
                   class: 'btn btn-sm',
@@ -1220,6 +1224,67 @@ function renderDocuments() {
     el('p', { class: 'small' }, 'Templates are ticked for you based on what a new tenancy normally needs.'),
     el('div', { class: 'doc-grid mt' }, ...cards),
     el('div', { class: 'form-actions' }, el('span', { class: 'small' }, `${state.selection.size} selected`), generateButton),
+    customSection(pack),
+  );
+}
+
+/** The agency's own uploads, offered for this pack. */
+function customSection(pack) {
+  const templates = state.customTemplates ?? [];
+  if (templates.length === 0) return null;
+
+  const items = templates.map((template) =>
+    el(
+      'div',
+      { class: 'generated-item' },
+      el(
+        'div',
+        { class: 'who' },
+        el('strong', {}, template.name),
+        el('span', {}, template.fillMode === 'blanks' ? 'fills the blanks of your form' : 'fills your document in place'),
+      ),
+      el(
+        'button',
+        {
+          class: 'btn btn-sm btn-primary',
+          type: 'button',
+          onClick: async () => {
+            try {
+              const result = await api(`/api/packs/${pack.id}/fill/${template.id}`, {
+                method: 'POST',
+                body: '{}',
+              });
+              state.detail = result.pack;
+              await refreshPacks();
+              renderMain();
+              const missed = result.report.notFound.length;
+              toast(
+                missed === 0
+                  ? `${template.name} filled — ${result.report.filled} value${result.report.filled === 1 ? '' : 's'}.`
+                  : `${template.name} filled, but ${missed} value${missed === 1 ? '' : 's'} not found in the document.`,
+                missed !== 0,
+              );
+            } catch (error) {
+              toast(error.message, true);
+            }
+          },
+        },
+        'Fill for this tenant',
+      ),
+    ),
+  );
+
+  return el(
+    'div',
+    {},
+    el('hr', { class: 'sep' }),
+    el('h3', { style: { fontSize: '.95rem', marginBottom: '.2rem' } }, 'Your own documents'),
+    el(
+      'p',
+      { class: 'small' },
+      'Filled from the same details, in your own layout. Upload and map them in Back office → Our documents.',
+    ),
+    el('div', { class: 'generated-list mt' }, ...items),
   );
 }
 
@@ -1492,12 +1557,15 @@ const BO_TABS = [
   ['settings', 'Our details'],
   ['properties', 'Properties & rooms'],
   ['people', 'Landlords & tenants'],
+  ['documents', 'Our documents'],
   ['tidy', 'Tidy up'],
 ];
 
 async function loadBackOffice() {
-  state.backOffice = await api('/api/backoffice');
-  return state.backOffice;
+  const [data, custom] = await Promise.all([api('/api/backoffice'), api('/api/custom-templates')]);
+  state.backOffice = data;
+  state.customTemplates = custom.templates ?? [];
+  return data;
 }
 
 function renderBackOffice(main) {
@@ -1557,6 +1625,7 @@ function renderBackOffice(main) {
   let body;
   if (state.boTab === 'properties') body = renderPropertiesSection(data);
   else if (state.boTab === 'people') body = renderPeopleSection(data);
+  else if (state.boTab === 'documents') body = renderOurDocumentsSection();
   else if (state.boTab === 'tidy') body = renderMigrationSection(data);
   else body = renderSettingsSection(data);
 
@@ -1930,8 +1999,285 @@ function renderPeopleSection(data) {
   );
 }
 
-function renderMigrationSection(data) {
-  if (data.unlinked.length === 0) {
+/* ------------------------------------------------- their own documents --- */
+
+/** A picker listing every detail the app holds, for mapping one value. */
+function fieldPicker(value, onChange) {
+  const groups = new Map();
+  for (const field of state.fields) {
+    if (!groups.has(field.group)) groups.set(field.group, []);
+    groups.get(field.group).push(field);
+  }
+  const selects = el(
+    'select',
+    { class: 'field-map' },
+    el('option', { value: '' }, '— not used —'),
+    ...[...groups.entries()].map(([groupId, fields]) => {
+      const label = state.groups.find((group) => group.id === groupId)?.title ?? groupId;
+      return el(
+        'optgroup',
+        { label },
+        ...fields.map((field) => el('option', { value: field.key, selected: value === field.key }, field.label)),
+      );
+    }),
+  );
+  selects.addEventListener('change', () => onChange(selects.value));
+  return selects;
+}
+
+function renderOurDocumentsSection() {
+  const templates = state.customTemplates ?? [];
+
+  const fileInput = el('input', { type: 'file', accept: '.docx', id: 'upload-file' });
+  const nameInput = el('input', { type: 'text', id: 'upload-name', placeholder: 'What shall we call it? e.g. Our tenancy agreement' });
+
+  const cards = templates.map((template) => {
+    const audit = template.audit ?? { counts: { error: 0, warning: 0, info: 0 }, findings: [] };
+    const state_ = (template.links ?? []).slice();
+    const blanks_ = (template.blankFields ?? []).slice();
+    let mode = template.fillMode ?? 'values';
+    const editor = el('div', {});
+
+    const drawEditor = () => {
+      if (mode === 'blanks') {
+        const rows = blanks_.map((field, index) =>
+          el(
+            'div',
+            { class: 'map-row' },
+            el('span', { class: 'map-sample' }, `Blank ${index + 1}`),
+            fieldPicker(field, (next) => {
+              blanks_[index] = next;
+            }),
+            el(
+              'button',
+              {
+                class: 'btn btn-ghost btn-sm',
+                type: 'button',
+                onClick: () => {
+                  blanks_.splice(index, 1);
+                  drawEditor();
+                },
+              },
+              'Remove',
+            ),
+          ),
+        );
+        editor.replaceChildren(
+          el(
+            'p',
+            { class: 'small' },
+            `This looks like a blank form with ${audit.wordCount === 0 ? 'several' : ''} spaces. Pick which detail goes in each space, in the order they appear.`,
+          ),
+          ...rows,
+          el(
+            'button',
+            {
+              class: 'btn btn-sm',
+              type: 'button',
+              onClick: () => {
+                blanks_.push('');
+                drawEditor();
+              },
+            },
+            'Add a blank',
+          ),
+        );
+      } else {
+        const rows = state_.map((link, index) =>
+          el(
+            'div',
+            { class: 'map-row' },
+            el('span', { class: 'map-sample', title: link.sample }, link.sample.length > 42 ? `${link.sample.slice(0, 42)}…` : link.sample),
+            link.field === '' ? el('span', { class: 'badge badge-warn' }, 'choose') : null,
+            fieldPicker(link.field, (next) => {
+              state_[index].field = next;
+            }),
+            el(
+              'button',
+              {
+                class: 'btn btn-ghost btn-sm',
+                type: 'button',
+                onClick: () => {
+                  state_.splice(index, 1);
+                  drawEditor();
+                },
+              },
+              'Remove',
+            ),
+          ),
+        );
+        editor.replaceChildren(
+          el(
+            'p',
+            { class: 'small' },
+            state_.some((link) => link.field === '')
+              ? 'These are the parts that change between tenants. Anything marked “choose” needs you to say which detail it is.'
+              : 'These are the parts that change between tenants. Check each one, then save.',
+          ),
+          ...rows,
+          el(
+            'div',
+            { class: 'map-row' },
+            el('input', { type: 'text', placeholder: 'Text to replace', id: `add-sample-${template.id}` }),
+            el(
+              'button',
+              {
+                class: 'btn btn-sm',
+                type: 'button',
+                onClick: () => {
+                  const input = $(`#add-sample-${template.id}`);
+                  const sample = input.value.trim();
+                  if (sample === '') return;
+                  state_.push({ sample, field: '' });
+                  drawEditor();
+                },
+              },
+              'Add a value',
+            ),
+          ),
+        );
+      }
+    };
+
+    drawEditor();
+
+    return el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, template.name),
+      el(
+        'p',
+        { class: 'small' },
+        `${template.fileName} · ${template.wordCount} words · ` +
+          (audit.counts.error > 0
+            ? `${audit.counts.error} thing${audit.counts.error === 1 ? '' : 's'} worth fixing`
+            : 'nothing to flag'),
+      ),
+      audit.findings.length > 0
+        ? el(
+            'div',
+            { class: 'bo-sub' },
+            ...audit.findings.slice(0, 4).map((finding) =>
+              el('div', { class: 'bo-room' }, el('span', {}, finding.title), el('span', { class: 'small' }, finding.severity)),
+            ),
+          )
+        : null,
+      el(
+        'div',
+        { class: 'map-row', style: { marginTop: '.6rem' } },
+        el(
+          'select',
+          {
+            class: 'bo-inline',
+            onChange: (event) => {
+              mode = event.target.value;
+              drawEditor();
+            },
+          },
+          el('option', { value: 'values', selected: mode === 'values' }, 'Fill values in place'),
+          el('option', { value: 'blanks', selected: mode === 'blanks' }, 'Fill in the blanks'),
+        ),
+        el('span', { class: 'small' }, mode === 'values' ? 'Replaces the previous tenant’s details' : 'Fills each ______ in order'),
+      ),
+      editor,
+      el(
+        'div',
+        { class: 'form-actions' },
+        el(
+          'button',
+          {
+            class: 'btn btn-ghost btn-sm',
+            type: 'button',
+            onClick: async () => {
+              if (!window.confirm(`Remove “${template.name}”? The original file is deleted.`)) return;
+              try {
+                await api(`/api/custom-templates/${template.id}`, { method: 'DELETE' });
+                await loadBackOffice();
+                renderMain();
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Remove',
+        ),
+        el(
+          'button',
+          {
+            class: 'btn btn-primary',
+            type: 'button',
+            onClick: async () => {
+              try {
+                await api(`/api/custom-templates/${template.id}`, {
+                  method: 'PATCH',
+                  body: JSON.stringify({ fillMode: mode, links: state_, blankFields: blanks_ }),
+                });
+                toast('Saved.');
+                await loadBackOffice();
+                renderMain();
+              } catch (error) {
+                toast(error.message, true);
+              }
+            },
+          },
+          'Save mapping',
+        ),
+      ),
+    );
+  });
+
+  const upload = el(
+    'button',
+    {
+      class: 'btn btn-primary',
+      type: 'button',
+      onClick: async () => {
+        const file = fileInput.files?.[0];
+        if (!file) {
+          toast('Choose a .docx file first.', true);
+          return;
+        }
+        try {
+          const buffer = await file.arrayBuffer();
+          let binary = '';
+          const bytes = new Uint8Array(buffer);
+          for (let i = 0; i < bytes.length; i += 1) binary += String.fromCharCode(bytes[i]);
+          const data = btoa(binary);
+          await api('/api/custom-templates', {
+            method: 'POST',
+            body: JSON.stringify({ name: nameInput.value.trim(), fileName: file.name, data }),
+          });
+          toast('Uploaded. Check the mapping below.');
+          await loadBackOffice();
+          renderMain();
+        } catch (error) {
+          toast(error.message, true);
+        }
+      },
+    },
+    'Upload',
+  );
+
+  return el(
+    'div',
+    { class: 'bo-grid' },
+    el(
+      'div',
+      { class: 'bo-section' },
+      el('h3', {}, 'Use your own documents'),
+      el(
+        'p',
+        { class: 'small' },
+        'Upload a Word file and the app fills it for each tenant — your letterhead, your numbering, your wording. If you only have a PDF, open it in Word and save it as .docx first.',
+      ),
+      el('div', { class: 'grid-2' }, fileInput, nameInput),
+      el('div', { class: 'form-actions' }, el('span', { class: 'small' }, `${templates.length} uploaded`), upload),
+    ),
+    ...cards,
+  );
+}
+
+function renderMigrationSection(data) {  if (data.unlinked.length === 0) {
     return el('div', { class: 'notice notice-info' }, 'Every tenancy is linked to a property. Nothing to tidy up.');
   }
 

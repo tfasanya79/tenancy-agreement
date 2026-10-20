@@ -19,7 +19,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 220 tests on `node:test` |
+| Tests | `tests/` | 232 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -282,6 +282,8 @@ data directory.
 | Change what a tenancy inherits | `src/backoffice/inheritance.ts` |
 | Add a back-office record type | `src/backoffice/entities.ts` |
 | Change how existing packs are migrated | `src/backoffice/migrate.ts` |
+| Change how an uploaded document's values are recognised | `src/docs/linkProposal.ts` |
+| Change where uploads are stored | `src/backoffice/customTemplates.ts` |
 | Change environment variables | `src/config.ts` **and** `.env.example` |
 
 After changing anything in `src/docs/` or `templates/`, run `pnpm sample` — it

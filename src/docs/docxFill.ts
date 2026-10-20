@@ -256,9 +256,67 @@ export function fillDocx(buffer: Buffer, replacements: readonly Replacement[]): 
 }
 
 /* -------------------------------------------------------------------------- */
-/*  Turning a pack into substitutions                                         */
+/*  Filling in visible blanks                                                 */
 /* -------------------------------------------------------------------------- */
 
+/**
+ * Fill `________` blanks in document order.
+ *
+ * A blank form cannot be matched by value — every blank looks the same — so the
+ * values are applied in the order the blanks appear, which is the order the form
+ * asks its questions. This is how the client's holding deposit form is filled.
+ */
+export function fillDocxBlanks(
+  buffer: Buffer,
+  values: readonly string[],
+): { buffer: Buffer; filled: number; remaining: number } {
+  const entries = readZip(buffer);
+  const queue = [...values];
+  let filled = 0;
+
+  // Body first, then the other parts, so the order matches what a reader sees.
+  const order = [...entries.keys()].sort((a, b) => {
+    if (a === 'word/document.xml') return -1;
+    if (b === 'word/document.xml') return 1;
+    return a.localeCompare(b);
+  });
+
+  for (const name of order) {
+    if (!TEXT_PART.test(name)) continue;
+    if (queue.length === 0) break;
+
+    const xml = entries.get(name)?.toString('utf8');
+    if (xml === undefined) continue;
+
+    let edited = xml.replace(PARAGRAPH, (paragraph) => {
+      let current = paragraph;
+      for (;;) {
+        if (queue.length === 0) break;
+        const { text } = collectRuns(current);
+        // A run of three or more underscores is a blank to fill.
+        const match = /_{3,}/.exec(text);
+        if (match === null) break;
+        const next = queue.shift();
+        if (next === undefined) break;
+        current = replaceSpan(current, match.index, match.index + match[0].length, next);
+        filled += 1;
+      }
+      return current;
+    });
+
+    if (edited !== xml) entries.set(name, Buffer.from(edited, 'utf8'));
+  }
+
+  return {
+    buffer: createZip([...entries].map(([name, data]) => ({ name, data }))),
+    filled,
+    remaining: queue.length,
+  };
+}
+
+/* -------------------------------------------------------------------------- */
+/*  Turning a pack into substitutions                                         */
+/* -------------------------------------------------------------------------- */
 /**
  * One link between a detail we hold and the text to look for in their document.
  *
