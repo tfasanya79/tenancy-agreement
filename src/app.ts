@@ -118,6 +118,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       baseUrl: config.deepseekBaseUrl,
     });
 
+  /**
+   * An empty body is not a broken body. Plenty of clients set
+   * `Content-Type: application/json` on every request, including a DELETE that
+   * carries nothing — Fastify's default parser rejects those with "Body cannot
+   * be empty when content-type is set to 'application/json'", which turns
+   * deleting a tenancy into an error the agent cannot do anything about.
+   */
+  app.addContentTypeParser('application/json', { parseAs: 'string' }, (_request, body, done) => {
+    const text = typeof body === 'string' ? body.trim() : '';
+    if (text === '') {
+      done(null, {});
+      return;
+    }
+    try {
+      done(null, JSON.parse(text) as unknown);
+    } catch (error) {
+      done(error as Error);
+    }
+  });
+
   // The back office shares the same SQLite file and connection as the packs.
   const backOffice = new BackOffice(store.handle);
   const customTemplates = new CustomTemplateStore(store.handle, config.dataDir);

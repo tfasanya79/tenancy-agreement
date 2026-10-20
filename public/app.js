@@ -91,10 +91,12 @@ function toast(message, isError = false) {
 }
 
 async function api(path, options = {}) {
-  const response = await fetch(path, {
-    headers: { 'Content-Type': 'application/json' },
-    ...options,
-  });
+  // Only claim to be sending JSON when there is a body: the server rejects an
+  // empty body sent as application/json, which is what made Delete fail with
+  // "Body cannot be empty when content-type is set to 'application/json'".
+  const headers = { ...(options.headers ?? {}) };
+  if (options.body !== undefined && options.body !== null) headers['Content-Type'] = 'application/json';
+  const response = await fetch(path, { ...options, headers });
   if (response.status === 204) return null;
   const text = await response.text();
   let data = null;
@@ -325,7 +327,21 @@ function renderMain() {
           step('2', 'Let the assistant do the reading', 'It pulls out names, dates and amounts — and asks you about anything it cannot find.'),
           step('3', 'Check, then download', 'Review the compliance checks, then download Word files or print them to PDF.'),
         ),
-        el('button', { class: 'btn btn-primary', type: 'button', onClick: createPack }, 'Create your first pack'),
+        el(
+          'div',
+          { style: { display: 'flex', gap: '.5rem', justifyContent: 'center', flexWrap: 'wrap' } },
+          el('button', { class: 'btn btn-primary', type: 'button', onClick: createPack }, 'Create your first pack'),
+          el(
+            'button',
+            { class: 'btn', type: 'button', onClick: () => void openOurDocuments() },
+            'Upload my own documents',
+          ),
+        ),
+        el(
+          'p',
+          { class: 'small', style: { marginTop: '.8rem' } },
+          'Already have your own agreement, inventory report or notice? Upload it once and every pack uses your layout.',
+        ),
       ),
     );
     return;
@@ -1464,10 +1480,40 @@ function coverMessagePanel(pack) {
   );
 }
 
-/** The agency's own uploads, offered for this pack. */
+/**
+ * The question the app should have asked at the start: do you already have your
+ * own versions of these documents? An agent who has never opened the back office
+ * will not go looking there on the off chance, so it is asked here.
+ */
 function customSection(pack) {
   const templates = state.customTemplates ?? [];
-  if (templates.length === 0) return null;
+
+  const uploadButton = (label) =>
+    el(
+      'button',
+      { class: 'btn btn-sm btn-primary', type: 'button', onClick: () => void openOurDocuments() },
+      label,
+    );
+
+  if (templates.length === 0) {
+    return el(
+      'div',
+      {},
+      el('hr', { class: 'sep' }),
+      el('h3', { style: { fontSize: '.95rem', marginBottom: '.2rem' } }, 'Do you already have your own versions?'),
+      el(
+        'p',
+        { class: 'small' },
+        'If you send tenants your own agreement, inventory report or notice, upload it once. From then on, every pack is produced in your layout and your wording, with the blank spaces filled in from the details you enter here — nothing retyped, nothing reformatted. If you would rather not, the documents above are ready to use as they are.',
+      ),
+      el(
+        'div',
+        { class: 'form-actions' },
+        el('span', { class: 'small' }, 'Word files (.docx), one per document'),
+        uploadButton('Upload our documents'),
+      ),
+    );
+  }
 
   const items = templates.map((template) =>
     el(
@@ -1518,9 +1564,10 @@ function customSection(pack) {
     el(
       'p',
       { class: 'small' },
-      'Filled from the same details, in your own layout. Upload and map them in Back office → Our documents.',
+      'Filled from the same details, in your own layout. Manage or add to these in Back office → Our documents.',
     ),
     el('div', { class: 'generated-list mt' }, ...items),
+    el('div', { class: 'form-actions' }, el('span', { class: 'small' }, `${templates.length} uploaded`), uploadButton('Add another')),
   );
 }
 
@@ -2012,6 +2059,7 @@ const BO_TABS = [
   ['tidy', 'Tidy up'],
 ];
 
+/** Load the agency's own records, uploads and health figures. */
 async function loadBackOffice() {
   const [data, custom, health] = await Promise.all([
     api('/api/backoffice'),
@@ -2022,6 +2070,29 @@ async function loadBackOffice() {
   state.customTemplates = custom.templates ?? [];
   state.health = health;
   return data;
+}
+
+/**
+ * Open the back office, optionally on a named tab. Nothing is loaded until it is
+ * needed, so the page shows its heading first rather than an empty screen.
+ */
+async function openBackOffice(tab) {
+  if (typeof tab === 'string' && tab !== '') state.boTab = tab;
+  state.view = 'backoffice';
+  renderMain();
+  if (state.backOffice === null || state.backOffice === undefined) {
+    await loadBackOffice();
+    renderMain();
+  }
+}
+
+/** The place an agent uploads their own agreement, report or notice. */
+async function openOurDocuments() {
+  try {
+    await openBackOffice('documents');
+  } catch (error) {
+    toast(error.message, true);
+  }
 }
 
 function renderBackOffice(main) {

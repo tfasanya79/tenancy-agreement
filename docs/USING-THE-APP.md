@@ -152,6 +152,28 @@ in your file storage.
 Documents regenerate cleanly: generate again and the old version of that document
 is replaced, not duplicated.
 
+### Your own documents
+
+At the bottom of the Documents tab the app asks the question worth asking once:
+**do you already have your own versions?** If you send tenants your own agreement,
+inventory report or notice, you do not have to use ours.
+
+1. Press **Upload our documents** — it opens **Back office → Our documents**.
+2. Choose the Word file and give it a name. Upload one document at a time.
+3. The app reads it and shows you each value it found next to a box: pick the detail
+   that belongs there (`agent.company_name`, `tenancy.rent_monthly`, and so on). Where
+   it guessed, the guess is already in the box — check the ones marked **choose**.
+4. From then on the document appears on every tenancy's Documents tab with a
+   **Fill for this tenant** button. The file it produces is your layout, your
+   wording, your letterhead, with this tenant's details in place of the old ones.
+
+A blank form — a paper-style agreement with lines to fill in — is handled too: the
+app finds the blank spaces, in order, and asks which detail goes in each.
+
+If you only have a PDF, open it in Word and save it as `.docx` first: the app
+cannot see inside a PDF. Uploaded files stay in your own data folder, and their
+contents are never sent to the AI.
+
 ### Checks
 
 Three groups, in this order of seriousness:
@@ -179,6 +201,23 @@ when there is something it cannot do itself, like *"Protect the deposit with the
 scheme by 19 November"*. You can add and delete your own.
 
 ---
+
+## The back office
+
+The **Back office** button at the top right holds everything that is not one
+tenancy. It is where a detail is written once instead of on every pack.
+
+| Tab | What it is for |
+| --- | --- |
+| **Our details** | Your company name, address, email, phone, client money protection scheme and redress scheme. These fill every document. Also the review mode: *relaxed* asks before generating, *strict* holds the documents until you fix the issue. |
+| **Properties & rooms** | Each property, and each room in it. Fill the address once here and a new pack for that property inherits it. |
+| **Landlords & tenants** | The landlord's name and address, and the tenants you have dealt with before. |
+| **Our documents** | Upload your own Word templates — see [Your own documents](#your-own-documents). |
+| **Health & backup** | **Download a backup** — one zip with the database, every document and every upload — plus what is on disk and what the app can see. |
+| **Tidy up** | Pull the details you have already typed into packs into the records above, so the next tenancy is quicker. It shows you what it would do before it does anything. |
+
+Nothing in the back office is required. A tenancy works with the details typed on
+its own pack; the records just mean you stop typing them twice.
 
 ## A normal week
 

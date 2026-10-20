@@ -414,7 +414,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     261 tests
+├── tests/                     263 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -431,7 +431,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 261 tests |
+| `pnpm test` | Run the 263 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm golden` | Record the rendered text of every template, so a wording change is a deliberate act |
@@ -526,11 +526,11 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 ## Status and roadmap
 
-**v1.0.0** — working and tested, with the "bring your own document" work in progress.
+**v1.0.0** — working and tested: the built-in document set, your own `.docx` uploads, the assistant, and the back office.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 261 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 263 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
@@ -553,10 +553,9 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | Accounts, multi-user | ✗ by design |
 | Sending email, e-signature | ✗ out of scope — see [docs/TOOLBOX.md](docs/TOOLBOX.md) |
 
-Planned next, roughly in order: the upload → confirm-the-links → fill screen ·
-calendar reminders (`.ics`) exported from the deadline list · a cross-pack
-dashboard of upcoming deadlines · a per-pack activity history view · optional PDF
-output when LibreOffice is present · tenancy renewal and end-of-tenancy packs.
+Planned next, roughly in order: an end-of-tenancy pack (check-out inventory and
+deposit deduction schedule) · tenancy renewal · optional PDF output when
+LibreOffice is present.
 
 ---
 
@@ -568,7 +567,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 261 tests
+pnpm test        # 263 tests
 pnpm typecheck
 ```
 

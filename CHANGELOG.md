@@ -8,6 +8,29 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Fixed — deleting a tenancy failed, and the back office did nothing
+
+Two faults behind the same complaint: *"why is it not possible to delete a tenant?"*
+and *"there was meant to be an upload option — I can't find it."*
+
+- **Delete answered "Body cannot be empty when content-type is set to
+  'application/json'".** The interface labelled every request as JSON, including a
+  delete that carries nothing, and the server refuses an empty JSON body. That made
+  deleting a tenancy, a note and an uploaded document all fail. The request now
+  declares JSON only when it has something to send, and the server treats an empty
+  body as an empty object rather than an error — so a script or a phone client that
+  always sets the header works too.
+- **The Back office button was wired to a function that did not exist.** Clicking it
+  threw a silent error and nothing happened. Everything that lives there — our
+  details, properties and rooms, landlords and tenants, **our documents**, backup —
+  was unreachable. It opens now.
+- **The upload was also hidden even once the back office worked.** It was only
+  mentioned in one line of small print. The Documents tab now asks the question
+  directly — *do you already have your own versions?* — with an **Upload our
+  documents** button; a first-run screen offers the same, and the tab shows an
+  **Add another** button once something is uploaded.
+- Two tests now cover the empty-body case, so the delete cannot silently break again.
+
 ### Fixed — asking for a draft gave you a receipt, not a draft
 
 Clicking *Draft the covering email and a short WhatsApp message* answered "the

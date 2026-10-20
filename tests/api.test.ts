@@ -166,6 +166,37 @@ describe('pack lifecycle', () => {
     assert.equal(missing.statusCode, 404);
   });
 
+  // The interface used to send `Content-Type: application/json` on every call,
+  // including a Delete with nothing to send, and the server answered "Body
+  // cannot be empty when content-type is set to 'application/json'". Deleting a
+  // tenancy looked impossible. An empty body is now simply an empty body.
+  it('deletes a pack even when the client claims an empty JSON body', async () => {
+    const pack = await createPack();
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/packs/${pack.id}`,
+      headers: { 'content-type': 'application/json' },
+    });
+    assert.equal(response.statusCode, 204);
+  });
+
+  it('deletes a note whose request declares an empty JSON body', async () => {
+    const pack = await createPack();
+    const added = await app.inject({
+      method: 'POST',
+      url: `/api/packs/${pack.id}/notes`,
+      payload: { text: 'Send the How to Rent guide' },
+    });
+    const [note] = added.json().notes;
+    const response = await app.inject({
+      method: 'DELETE',
+      url: `/api/packs/${pack.id}/notes/${note.id}`,
+      headers: { 'content-type': 'application/json' },
+    });
+    assert.equal(response.statusCode, 200);
+    assert.equal(response.json().notes.length, 0);
+  });
+
   it('404s for a pack that does not exist', async () => {
     const response = await app.inject({ method: 'GET', url: '/api/packs/not-a-real-id' });
     assert.equal(response.statusCode, 404);
