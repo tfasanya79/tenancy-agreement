@@ -366,6 +366,182 @@ sudo ufw allow 'Nginx Full'
 sudo ufw enable
 ```
 
+### Step 8 — the same thing with systemd and Caddy, no Docker
+
+Already have a server running other services behind Caddy? This is the smaller
+footprint: one systemd unit, one reverse-proxy block, no container. It is the
+setup the project has been deployed with, and the one to copy.
+
+**Node 24 as a normal user.** Do not fight the distribution's Node. With nvm:
+
+```bash
+source ~/.nvm/nvm.sh
+nvm install 24 && nvm alias default 24
+npm install -g pnpm@10
+```
+
+**Get the code and install.** There is nothing to build:
+
+```bash
+git clone <your-repo-url> ~/tenancydesk
+cd ~/tenancydesk
+pnpm install
+pnpm test          # 263 tests, no API key needed
+```
+
+**Configuration in one root-owned file**, so the key is not in the project folder
+and does not end up in a git commit:
+
+```bash
+sudo nano /etc/tenancydesk.env     # mode 600
+```
+
+```ini
+DEEPSEEK_API_KEY=sk-...
+PORT=8111
+HOST=127.0.0.1          # loopback only: the proxy is the door
+DATA_DIR=/home/you/tenancydesk/data
+NODE_ENV=production
+AGENCY_NAME=Your Agency Ltd
+AGENCY_EMAIL=you@example.com
+AGENCY_PHONE=...
+AGENCY_ADDRESS=...
+AGENCY_CLIENT_MONEY_SCHEME=
+AGENCY_REDRESS_SCHEME=
+```
+
+```bash
+sudo chown root:root /etc/tenancydesk.env && sudo chmod 600 /etc/tenancydesk.env
+mkdir -p ~/tenancydesk/data && chmod 700 ~/tenancydesk/data
+```
+
+**The unit**, `/etc/systemd/system/tenancydesk.service`. Note `TZ`: the app works
+in UK tenancy dates, so a server on UTC should be told the local zone or a
+deadline computed just after midnight will be a day out.
+
+```ini
+[Unit]
+Description=TenancyDesk - tenancy paperwork, one pack per tenant
+After=network-online.target
+Wants=network-online.target
+
+[Service]
+Type=simple
+User=you
+Group=you
+WorkingDirectory=/home/you/tenancydesk
+EnvironmentFile=/etc/tenancydesk.env
+Environment=NODE_ENV=production
+Environment=TZ=Europe/London
+ExecStart=/home/you/.nvm/versions/node/v24.22.0/bin/node src/server.ts
+Restart=on-failure
+RestartSec=3
+TimeoutStopSec=10
+NoNewPrivileges=yes
+PrivateTmp=yes
+ProtectSystem=strict
+ProtectHome=read-only
+ReadWritePaths=/home/you/tenancydesk/data
+ProtectKernelTunables=yes
+ProtectKernelModules=yes
+ProtectControlGroups=yes
+RestrictSUIDSGID=yes
+LockPersonality=yes
+
+[Install]
+WantedBy=multi-user.target
+```
+
+The last group locks the process down: read-only filesystem except the data
+folder, no privilege escalation, no access to other users' home directories. The
+app needs to write in exactly one place, so this costs nothing.
+
+```bash
+sudo systemctl daemon-reload
+sudo systemctl enable --now tenancydesk
+sudo systemctl status tenancydesk --no-pager
+curl -s http://127.0.0.1:8111/api/health
+```
+
+**Caddy**, with a password and automatic TLS. Add a *new* host block to
+`/etc/caddy/Caddyfile`; do not touch the blocks that are already there:
+
+```
+tenancy.example.co.uk {
+	encode zstd gzip
+	basicauth /* {
+		agency <bcrypt-hash>
+	}
+	reverse_proxy 127.0.0.1:8111 {
+		flush_interval -1
+	}
+}
+```
+
+`caddy hash-password --plaintext 'your-password'` produces the hash. The
+`flush_interval -1` is for the assistant, which streams its progress as
+server-sent events — without it the reply can arrive in one lump at the end.
+
+```bash
+sudo caddy validate --config /etc/caddy/Caddyfile --adapter caddyfile
+sudo systemctl reload caddy
+```
+
+If the validate step fails on a block you did not write (an `{env.*}` placeholder,
+say), check the running service's own `EnvironmentFile` — Caddy resolves those at
+`run` time, and the offline checker does not. A reload that fails leaves the
+previous configuration running, so reloading is the safe way to find out.
+
+**Check the door, then check it again from outside the network.** No password must
+mean `401`, and the port itself must be unreachable:
+
+```bash
+curl -s -o /dev/null -w '%{http_code}\n' https://tenancy.example.co.uk/              # 401
+curl -s -o /dev/null -w '%{http_code}\n' -u agency:'the-password' https://tenancy.example.co.uk/   # 200
+curl --max-time 5 http://<server-ip>:8111/api/health                                 # must fail
+```
+
+**Nightly backup**, `/usr/local/bin/tenancydesk-backup.sh`, run from
+`/etc/cron.d/tenancydesk-backup` at 02:15. SQLite's own `.backup` gives a
+consistent copy while the app runs — copying the file with `cp` does not (see the
+WAL caveat in §5).
+
+```bash
+#!/usr/bin/env bash
+set -euo pipefail
+STAMP="$(date +%F)"
+DATA="/home/you/tenancydesk/data"
+DEST="/home/you/backups/tenancydesk"
+install -d -m 700 "${DEST}"
+TMP="$(mktemp -d)"; trap 'rm -rf "${TMP}"' EXIT
+install -d "${TMP}/stage"
+sqlite3 "${DATA}/tenancydesk.db" ".backup '${TMP}/stage/tenancydesk.db'"
+sqlite3 "${TMP}/stage/tenancydesk.db" 'PRAGMA integrity_check;'      # prints "ok"
+[ -f /etc/tenancydesk.env ] && install -m 600 /etc/tenancydesk.env "${TMP}/stage/tenancydesk.env"
+for extra in documents uploads; do
+  [ -d "${DATA}/${extra}" ] && cp -a "${DATA}/${extra}" "${TMP}/stage/${extra}"
+done
+tar czf "${DEST}/tenancydesk-${STAMP}.tar.gz" -C "${TMP}/stage" .
+chmod 600 "${DEST}/tenancydesk-${STAMP}.tar.gz"
+find "${DEST}" -maxdepth 1 -name 'tenancydesk-*.tar.gz' -mtime +30 -delete
+```
+
+```
+15 2 * * * root /usr/local/bin/tenancydesk-backup.sh >> /var/log/tenancydesk-backup.log 2>&1
+```
+
+Run it once by hand and open the archive. A backup nobody has opened is a guess.
+Then copy it off the machine — a backup on the same disk is not a backup.
+
+**Updating** is three commands:
+
+```bash
+cd ~/tenancydesk && git pull && pnpm install && sudo systemctl restart tenancydesk
+```
+
+Take a backup first (§5), and read `CHANGELOG.md` — template changes alter what a
+pack says, which matters more than code changes.
+
 ---
 
 ## 5. Backups

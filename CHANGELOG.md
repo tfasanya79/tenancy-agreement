@@ -8,6 +8,20 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — a runbook for hosting it on a real server
+
+`docs/DEPLOY.md` §4 now ends with the setup this has actually been deployed with:
+Node 24 from nvm, a root-owned `/etc/tenancydesk.env`, a hardened systemd unit
+(read-only filesystem apart from the data folder), a Caddy host block with a
+password and automatic TLS, `TZ=Europe/London` so deadline dates are computed in
+UK time, and a nightly backup that uses SQLite's `.backup` rather than copying the
+file under a running app.
+
+It also records two things learned the hard way: `flush_interval -1` on the proxy
+or the assistant's streamed reply arrives in one lump at the end, and a Caddyfile
+that contains `{env.*}` placeholders cannot be checked offline — a failed reload
+leaves the previous configuration running, so reloading is the safe way to test.
+
 ### Fixed — deleting a tenancy failed, and the back office did nothing
 
 Two faults behind the same complaint: *"why is it not possible to delete a tenant?"*
