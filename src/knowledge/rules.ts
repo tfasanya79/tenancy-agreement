@@ -318,3 +318,8 @@ export function searchRules(query: string): Rule[] {
 }
 
 export const RULES_REVIEWED_ON = '2026-10-19';
+
+/** One rule by id, for the "Why?" button on a finding. */
+export function ruleById(id: string): Rule | null {
+  return RULES.find((rule) => rule.id === id) ?? null;
+}

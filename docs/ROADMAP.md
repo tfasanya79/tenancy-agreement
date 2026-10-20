@@ -132,12 +132,11 @@ independent packs and eight documents.
 
 *What an agent needs three months later, and what a tenant is entitled to understand.*
 
-- [ ] **Timeline per pack**: what was given, when, to whom, downloadable as a one-page PDF.
-      Wins deposit disputes.
-- [ ] **"Why?" on every check**: click a finding, see the rule and its GOV.UK source. The
-      rule set already carries a citation per entry.
-- [ ] **Tenant summary**: a plain-English page generated from the pack — what is due, when,
-      who to call. Optionally translated.
+- [x] **Timeline per pack**: a printable one-page history of every document and note.
+- [x] **"Why?" on every check**: each finding explains itself, with its source.
+- [x] **Tenant summary**: a plain-English page rendered from the pack, added as an
+      editable template so the agency owns the wording. Not machine-translated — a
+      translation would be a template of its own, which is a decision for later.
 
 **Done when:** a dispute can be answered from the app in under a minute, and every warning
 the app shows can be traced to a published source.
@@ -150,17 +149,14 @@ the app shows can be traced to a published source.
 
 *Quality work. Invisible when done well; expensive when skipped.*
 
-- [ ] **Consistency checks** on an uploaded document — the errors found in the client's
-      contract on day one:
+- [x] **Consistency checks** on an uploaded document — the errors found in the client's contract on day one:
       - a weekday that contradicts its date ("Wednesday 5th September 2026" was a Saturday);
       - two different rent due days in one document ("the 1st" then "the 4th");
       - fees that the Tenant Fees Act 2019 does not allow ("a £15 admin fee for late rent" —
         only interest at 3% above base rate, and only after 14 days);
       - arithmetic typos ("the 1stth of each month").
-- [ ] **Golden-file tests**: hash the rendered text of each shipped template, so a wording
-      edit that changes every future agreement is caught in review.
-- [ ] A test that every documented command, path and test count matches the code —
-      already shipped as `pnpm docs:check`, wired into CI.
+- [x] **Golden-file tests**: the rendered text of every template is fingerprinted, so a wording edit is a deliberate act.
+- [x] A test that every documented command, path and test count matches the code — shipped as `pnpm docs:check`, wired into CI.
 
 **Done when:** re-uploading the client's current contract reports the weekday and rent-day
 errors automatically, without being told where to look.

@@ -86,6 +86,7 @@ export const FIELDS: readonly FieldDef[] = [
   { key: 'agent.address', label: 'Agency address', type: 'textarea', group: 'agency' },
   { key: 'agent.client_money_scheme', label: 'Client money protection scheme', type: 'text', group: 'agency', help: 'Required to be shown on agency paperwork.' },
   { key: 'agent.redress_scheme', label: 'Redress scheme', type: 'text', group: 'agency', help: 'e.g. The Property Ombudsman.' },
+  { key: 'agent.rent_account', label: 'Rent account details', type: 'textarea', group: 'agency', help: 'Where tenants pay. Appears on the tenant summary.' },
 
   // Landlord -------------------------------------------------------------
   { key: 'landlord.full_name', label: "Landlord's full name", type: 'text', group: 'landlord', core: true },

@@ -56,6 +56,7 @@ const FROM_AGENCY: Record<string, Getter> = {
   'agent.client_money_scheme': ({ agency }) => agency.clientMoneyScheme,
   'agent.redress_scheme': ({ agency }) => agency.redressScheme,
   'agent.name': ({ agency }) => agency.negotiator,
+  'agent.rent_account': ({ agency }) => agency.rentAccount,
 };
 
 /** landlord → landlord.* */

@@ -1,0 +1,46 @@
+{
+  "note": "Rendered-text fingerprints of the shipped templates. Regenerate with `pnpm golden` after reviewing a wording change.",
+  "generatedWith": "pnpm golden",
+  "templates": {
+    "apt-agreement": {
+      "words": 2513,
+      "sha": "945b94c2e2c4306b"
+    },
+    "deposit-prescribed-information": {
+      "words": 836,
+      "sha": "fd88809698852739"
+    },
+    "guarantor-deed": {
+      "words": 814,
+      "sha": "b345a10cca084777"
+    },
+    "inventory-checkin-report": {
+      "words": 607,
+      "sha": "3928af4cbcdcfc23"
+    },
+    "key-facts": {
+      "words": 275,
+      "sha": "336b86212d053577"
+    },
+    "rent-increase-notice": {
+      "words": 606,
+      "sha": "88adbd172750315b"
+    },
+    "right-to-rent-checklist": {
+      "words": 772,
+      "sha": "b7a29a73c0d7dcb7"
+    },
+    "section-8-notice": {
+      "words": 922,
+      "sha": "5785c9b8f6ecdbaf"
+    },
+    "tenant-welcome-pack": {
+      "words": 722,
+      "sha": "1ad4893fee486d13"
+    },
+    "written-statement-of-terms": {
+      "words": 911,
+      "sha": "1c479e0202a8a752"
+    }
+  }
+}

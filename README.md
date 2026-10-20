@@ -190,7 +190,7 @@ entirely. Everything except the AI works with no key at all.
 
 ## The documents
 
-Nine templates ship with the project. They are drafted for the position in
+Ten templates ship with the project. They are drafted for the position in
 England after **1 May 2026** — assured periodic tenancies, no section 21.
 
 | Document | Category | In the move-in set |
@@ -201,6 +201,7 @@ England after **1 May 2026** — assured periodic tenancies, no section 21.
 | Inventory and Check-In Report | `inventory` | ✅ |
 | Right to Rent and Pre-Tenancy Checklist | `compliance` | ✅ |
 | Tenant Welcome Pack | `welcome` | ✅ |
+| Your Tenancy at a Glance *(plain-English summary for the tenant)* | `welcome` | ✅ |
 | Guarantor Deed | `guarantee` | only if a guarantor is entered |
 | Section 8 Notice | `possession` | on request only |
 | Rent Increase Notice (section 13) | `rent-review` | on request only |
@@ -413,7 +414,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     248 tests
+├── tests/                     251 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -430,9 +431,10 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 248 tests |
+| `pnpm test` | Run the 251 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
+| `pnpm golden` | Record the rendered text of every template, so a wording change is a deliberate act |
 | `pnpm sample` | Rebuild `samples/` from the templates |
 | `pnpm demo:fill` | Show the "use our own Word document" engine filling an example agreement |
 | `pnpm repair:contracts` | Produce corrected copies of an agency's own contracts, with a change log (needs their files in `received from the client/`) |
@@ -528,7 +530,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 248 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 251 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
@@ -544,6 +546,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | Agreement audit — is an uploaded document still current? | ✅ flags assured shorthold, section 21, fixed terms and vague rent reviews |
 | Proofreading a document for internal contradictions | ✅ a weekday that does not match its date, two different rent due days, a fixed late-payment fee, a mistyped ordinal |
 | Repairing an agency's own contracts | ✅ `pnpm repair:contracts` rewrites the defective clauses in place, keeps the layout, and logs every change for sign-off |
+| Evidence trail and 'Why?' | ✅ a printable history of every document and note, and each check explains itself with its source |
 | Filling an agency's own `.docx` without losing its formatting | ✅ engine and tests; `pnpm demo:fill` shows it working |
 | Upload screen for a custom document | ✅ Back office → Our documents: upload, review the mapping, then fill it per tenant |
 | Recognising a document's variable parts | ✅ by shape and by the nearest explaining words; anything ambiguous is marked ''choose'' rather than guessed |
@@ -565,7 +568,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 248 tests
+pnpm test        # 251 tests
 pnpm typecheck
 ```
 

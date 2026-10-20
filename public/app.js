@@ -340,6 +340,7 @@ function renderMain() {
     ['details', 'Details', null],
     ['documents', 'Documents', documents.length > 0 ? documents.length : null],
     ['checks', 'Checks', errorCount > 0 ? errorCount : null],
+    ['history', 'History', null],
   ];
 
   main.replaceChildren(
@@ -445,6 +446,7 @@ function tabContent() {
     case 'details': return renderDetails();
     case 'documents': return renderDocuments();
     case 'checks': return renderChecks();
+    case 'history': return renderHistory();
     default: return renderAssistant();
   }
 }
@@ -1338,6 +1340,138 @@ function openPreview(title, html) {
 
 /* ---------------------------------------------------------------- checks --- */
 
+/**
+ * One finding, with a "Why?" that fetches the rule behind it.
+ *
+ * The rule set already carries a source for every entry; this makes it reachable
+ * at the moment somebody is deciding whether to act on the finding.
+ */
+function checkFinding(finding, severity) {
+  const whyBox = el('div', { class: 'why-box', style: { display: 'none' } });
+  let loaded = false;
+
+  const why = finding.ruleId === undefined
+    ? null
+    : el(
+        'button',
+        {
+          class: 'btn btn-ghost btn-sm why-button',
+          type: 'button',
+          onClick: async () => {
+            if (whyBox.style.display !== 'none') {
+              whyBox.style.display = 'none';
+              return;
+            }
+            whyBox.style.display = '';
+            if (loaded) return;
+            loaded = true;
+            whyBox.replaceChildren(el('p', { class: 'small' }, 'Looking it up…'));
+            try {
+              const data = await api(`/api/rules/${encodeURIComponent(finding.ruleId)}`);
+              whyBox.replaceChildren(
+                el('strong', {}, data.rule.title),
+                el('p', {}, data.rule.summary),
+                el('ul', {}, ...data.rule.detail.map((line) => el('li', {}, line))),
+                el(
+                  'a',
+                  { class: 'small', href: data.rule.source.url, target: '_blank', rel: 'noopener' },
+                  `Source: ${data.rule.source.label}`,
+                ),
+              );
+            } catch (error) {
+              whyBox.replaceChildren(el('p', { class: 'small' }, error.message));
+            }
+          },
+        },
+        'Why?',
+      );
+
+  return el(
+    'div',
+    { class: `check-item sev-${severity}` },
+    el(
+      'div',
+      { style: { flex: 1 } },
+      el('strong', {}, finding.title),
+      el('p', {}, finding.detail),
+      whyBox,
+    ),
+    why,
+  );
+}
+
+/** The record of what was given, when — the page that settles a dispute. */
+function renderHistory() {
+  const { pack, timeline } = state.detail;
+  const events = timeline ?? [];
+
+  const kindLabel = {
+    created: 'Opened',
+    document: 'Document',
+    note: 'Note',
+    assistant: 'Assistant',
+    message: 'Message',
+    status: 'Status',
+  };
+
+  const rows = events.map((event) =>
+    el(
+      'div',
+      { class: 'due-row' },
+      el(
+        'div',
+        { class: 'due-when' },
+        el('strong', {}, new Date(event.at).toLocaleDateString('en-GB', { day: 'numeric', month: 'short', year: 'numeric' })),
+        el('span', { class: 'small' }, new Date(event.at).toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit' })),
+      ),
+      el(
+        'div',
+        { class: 'due-what' },
+        el('strong', {}, event.title),
+        el(
+          'span',
+          { class: 'small' },
+          `${kindLabel[event.kind] ?? event.kind}${event.detail === '' ? '' : ` · ${event.detail}`}`,
+        ),
+      ),
+    ),
+  );
+
+  return el(
+    'div',
+    {},
+    el(
+      'div',
+      { style: { display: 'flex', alignItems: 'baseline', justifyContent: 'space-between', gap: '1rem', flexWrap: 'wrap' } },
+      el(
+        'div',
+        {},
+        el('h3', { style: { fontSize: '.95rem' } }, 'What happened, and when'),
+        el('p', { class: 'small' }, 'Everything the app recorded for this tenancy, newest first.'),
+      ),
+      el(
+        'button',
+        {
+          class: 'btn btn-sm',
+          type: 'button',
+          onClick: () => {
+            window.open(`/api/packs/${pack.id}/timeline.html`, '_blank', 'noopener');
+          },
+        },
+        'Print this history',
+      ),
+    ),
+    events.length === 0
+      ? el('div', { class: 'notice notice-info' }, 'Nothing recorded yet.')
+      : el('div', { class: 'bo-section mt' }, ...rows),
+    el(
+      'p',
+      { class: 'small', style: { marginTop: '1rem' } },
+      'The printed page is the thing to keep for a deposit dispute: tenant, property, rent, deposit and scheme, then every document on the date it was produced.',
+    ),
+  );
+}
+
 function renderChecks() {
   const { pack, readiness } = state.detail;
   const { findings, deadlines, counts } = readiness.compliance;
@@ -1349,13 +1483,7 @@ function renderChecks() {
       'div',
       { class: 'check-group' },
       el('h3', {}, `${title} (${items.length})`),
-      ...items.map((finding) =>
-        el(
-          'div',
-          { class: `check-item sev-${severity}` },
-          el('div', {}, el('strong', {}, finding.title), el('p', {}, finding.detail)),
-        ),
-      ),
+      ...items.map((finding) => checkFinding(finding, severity)),
     );
   };
 

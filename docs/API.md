@@ -520,3 +520,13 @@ has a reminder the day before.
 | `GET` | `/api/backup` | One zip: `tenancydesk.db` (copied with `VACUUM INTO`, so it is consistent while the app runs), `documents/`, `uploads/`, and restore instructions |
 | `GET` | `/api/health` | Counts, templates and their warnings, assistant status, Node version, and what is on disk |
 | `POST` | `/api/packs/bulk` | Create several tenancies at once: `{ lets: [{ roomId, tenantName, tenantEmail, startDate }] }`. Each becomes its own pack, linked to its own room and tenant, with the lifecycle set from the start date |
+---
+
+## Explaining a check, and the history of a tenancy
+
+| Method | Path | What it does |
+| --- | --- | --- |
+| `GET` | `/api/rules/:id` | One rule: title, summary, the detail points, and a source URL. This is what the "Why?" button fetches |
+| `GET` | `/api/packs/:id/timeline.html` | A one-page, print-ready history: the tenancy's facts, then every document, note and assistant run with its date |
+
+`GET /api/packs/:id` also returns `timeline`, the same events as JSON, newest first.

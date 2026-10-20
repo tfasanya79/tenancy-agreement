@@ -11,7 +11,7 @@ import { readFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
 
 import type { AppConfig } from './config.ts';
-import { Store, type Lifecycle, type Pack, type PackLinks, type PackStatus } from './db.ts';
+import { Store, tenantNameFrom, type Lifecycle, type Pack, type PackLinks, type PackStatus } from './db.ts';
 import { LIFECYCLES } from './backoffice/entities.ts';
 import { ENV_DEFAULTS, FIELDS, GROUPS, CORE_FIELDS } from './docs/fields.ts';
 import { mergeFields } from './docs/fields.ts';
@@ -19,7 +19,7 @@ import { runComplianceChecks } from './docs/compliance.ts';
 import { REVIEW_MODES, reviewGate, type ReviewMode } from './docs/gate.ts';
 import { generateDocuments } from './docs/generate.ts';
 import { assessPack, renderTemplate, type TemplateRegistry } from './docs/registry.ts';
-import { RULES_REVIEWED_ON, searchRules } from './knowledge/rules.ts';
+import { RULES_REVIEWED_ON, ruleById, searchRules } from './knowledge/rules.ts';
 import { DeepSeekClient } from './agent/deepseek.ts';
 import { runAgent, type AgentEvent } from './agent/loop.ts';
 import { EXAMPLE_PROMPTS } from './agent/prompts.ts';
@@ -30,6 +30,7 @@ import { contextFor, effectiveFields } from './backoffice/context.ts';
 import { applyMigration, previewMigration } from './backoffice/migrate.ts';
 import { aggregateDue } from './backoffice/due.ts';
 import { buildBackup, healthOf } from './backoffice/backup.ts';
+import { renderTimelineHtml, sortTimeline } from './docs/timeline.ts';
 import { buildCalendar } from './util/ics.ts';
 import { CustomTemplateStore } from './backoffice/customTemplates.ts';
 import { buildReplacements, extractDocxText, fillDocx, fillDocxBlanks, formatLike, resolveFieldPath } from './docs/docxFill.ts';
@@ -156,15 +157,47 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     const context = contextFor(pack, backOffice);
     const fields = { ...currentAgency(), ...context.resolved.values };
     const readiness = assessPack(fields);
+    const documents = store.listDocuments(pack.id);
     return {
       pack,
       fields,
       provenance: context.resolved.provenance,
       overrides: context.resolved.overrides,
       readiness: { ...readiness, ready: context.resolved.missing.length === 0, missingCore: context.resolved.missing },
-      documents: store.listDocuments(pack.id),
+      documents,
       templates: registry.list(fields),
       suggested: registry.suggestSelection(fields),
+      timeline: sortTimeline([
+        { at: pack.createdAt, kind: 'created', title: 'Pack opened', detail: pack.reference },
+        ...documents.map((document) => ({
+          at: document.generatedAt,
+          kind: 'document' as const,
+          title: document.title,
+          detail: 'Generated',
+        })),
+        ...pack.notes.map((note) => ({
+          at: note.createdAt,
+          kind: 'note' as const,
+          title: 'Note added',
+          detail: note.text,
+        })),
+        ...store.listRuns(pack.id, 60).map((run) => ({
+          at: run.createdAt,
+          kind: 'assistant' as const,
+          title: 'Assistant run',
+          detail: run.summary,
+        })),
+        ...(pack.coverMessage === null
+          ? []
+          : [
+              {
+                at: pack.coverMessage.createdAt,
+                kind: 'message' as const,
+                title: 'Message to the tenant saved',
+                detail: '',
+              },
+            ]),
+      ]),
       links: {
         landlord: pack.landlordId === null ? null : backOffice.getLandlord(pack.landlordId),
         property: pack.propertyId === null ? null : backOffice.getProperty(pack.propertyId),
@@ -249,6 +282,13 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
       ? String((request.query as Record<string, unknown>)['q'])
       : '';
     return { rules: searchRules(query), reviewedOn: RULES_REVIEWED_ON };
+  });
+
+  /** One rule, so a finding can explain itself when asked. */
+  app.get('/api/rules/:id', async (request, reply) => {
+    const rule = ruleById((request.params as Record<string, string>)['id'] ?? '');
+    if (rule === null) return notFound(reply, 'No rule with that id.');
+    return { rule, reviewedOn: RULES_REVIEWED_ON };
   });
 
   // --- back office --------------------------------------------------------
@@ -625,6 +665,42 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
     if (created.length === 0) return badRequest(reply, 'Nothing to create — each row needs a room and a tenant name.');
     return reply.code(201).send({ created, packs: created.length });
+  });
+
+  /** A one-page, printable history of the tenancy. */
+  app.get('/api/packs/:id/timeline.html', async (request, reply) => {
+    const pack = store.findPack(paramId(request));
+    if (pack === null) return notFound(reply, 'That pack no longer exists.');
+
+    const detail = packDetail(pack);
+    const fields = detail.fields as Record<string, unknown>;
+    const text = (key: string): string => (typeof fields[key] === 'string' ? (fields[key] as string) : '');
+    const money = (key: string): string => {
+      const value = fields[key];
+      return typeof value === 'number' ? `£${value.toLocaleString('en-GB')}` : '';
+    };
+
+    const html = renderTimelineHtml({
+      pack,
+      events: detail.timeline,
+      facts: [
+        { label: 'Tenant', value: tenantNameFrom(fields) || pack.tenantName },
+        {
+          label: 'Property',
+          value: [text('property.address_line1'), text('property.postcode')].filter((part) => part !== '').join(', '),
+        },
+        { label: 'Room', value: text('property.room_number') },
+        { label: 'Landlord', value: text('landlord.full_name') },
+        { label: 'Tenancy started', value: text('tenancy.start_date') },
+        { label: 'Rent', value: money('tenancy.rent_amount') },
+        { label: 'Deposit', value: money('tenancy.deposit_amount') },
+        { label: 'Deposit scheme', value: text('tenancy.deposit_scheme') },
+        { label: 'Status', value: pack.lifecycle },
+      ],
+      footerText: String(currentAgency()['agent.company_name'] ?? ''),
+    });
+
+    return reply.code(200).header('Content-Type', 'text/html; charset=utf-8').send(html);
   });
 
   // --- packs --------------------------------------------------------------

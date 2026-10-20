@@ -8,6 +8,31 @@ All notable changes to this project. The format follows
 
 ## [Unreleased]
 
+### Added — M5: evidence, explanations and a tenant summary
+
+- **A History tab** per tenancy: every document, note, assistant run and saved
+  message, newest first, with a **Print this history** button. The printed page
+  carries the facts that settle a deposit dispute — tenant, property, room, landlord,
+  dates, rent, deposit and scheme — followed by every document on the date it was
+  produced.
+- **"Why?" on every check.** Each finding that has a rule behind it now explains
+  itself in place: the rule, the detail points, and a GOV.UK source. The 21 sourced
+  rules were already there; nothing could reach them.
+- **A tenant summary** as an editable template (`templates/key-facts.md`) rather than
+  something the model invents: what you pay and when, how to pay, how to end the
+  tenancy, who to contact, and what to do about repairs. It joins the move-in set, so
+  a new pack now produces seven documents.
+
+### Added — M6: the templates cannot change by accident
+
+`pnpm golden` fingerprints the rendered *text* of every shipped template;
+`tests/golden.test.ts` fails when one differs. A wording change is now a deliberate
+act — run `pnpm golden` and commit the updated file alongside the template — and a
+change to styling or Word metadata does not trip it.
+
+251 tests. `pnpm docs:check` clean.
+
+
 ### Added — M7: backup and health
 
 There are real tenancies, documents and uploads in `data/` now, and they survived

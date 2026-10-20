@@ -159,7 +159,7 @@ describe('internal consistency', () => {
 });
 
 describe('our own templates', () => {
-  it('all pass the audit they will apply to uploads', async () => {
+  it('every shipped template passes the audit applied to uploads', async () => {
     const registry = await TemplateRegistry.load('./templates');
     for (const summary of registry.list()) {
       const report = auditDocumentText(registry.get(summary.id).body);
