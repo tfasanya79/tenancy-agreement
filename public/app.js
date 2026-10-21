@@ -153,6 +153,9 @@ async function loadWorkspace() {
   renderStatus();
   renderIdentity();
   renderSidebar();
+  // Their own feedback, so "it went somewhere" is visible rather than assumed.
+  await loadMyFeedback();
+  renderFeedbackPill();
 
   if (state.packs.length > 0) {
     await selectPack(state.packs[0].id, { keepTab: false });
@@ -177,6 +180,11 @@ function renderIdentity() {
   if (state.me === null) {
     who.hidden = true;
     out.hidden = true;
+    feedbackState.open = false;
+    feedbackState.messages = [];
+    feedbackState.proposal = null;
+    feedbackState.mine = [];
+    renderFeedbackPill();
     return;
   }
 
@@ -204,6 +212,7 @@ function renderIdentity() {
   // The interface offers only what the server would allow.
   newPack.hidden = isLandlord();
   backOffice.hidden = isLandlord();
+  renderFeedbackPill();
 }
 
 /* ------------------------------------------------------------------- gate --- */
@@ -2218,6 +2227,431 @@ async function renderDue(main) {
   );
 }
 
+/* -------------------------------------------------------------- feedback --- */
+
+/**
+ * The FEEDBACK button.
+ *
+ * Everybody with an account gets it, because a landlord's confusion is exactly what
+ * this is for. What it collects is addressed to the product's owner, never to the
+ * agency — so the panel says so, and the queue behind it is the operator's alone.
+ *
+ * The conversation is optional: if the assistant is off or unreachable, the same panel
+ * becomes a plain form that files the same record.
+ */
+const feedbackState = {
+  open: false,
+  busy: false,
+  messages: [], // { role: 'tester' | 'agent', text }
+  proposal: null,
+  unavailable: false,
+  mine: [],
+};
+
+const KIND_WORDS = {
+  improvement: 'Improvement',
+  new_feature: 'New feature',
+  bug: 'Something broken',
+  confusion: 'Hard to find',
+  praise: 'Praise',
+};
+
+/** Where the person was standing when they pressed the button. */
+function feedbackContext() {
+  const screen = state.view === 'tenancy' ? (state.tab ?? '') : state.view;
+  return {
+    screen,
+    packReference: state.detail?.pack?.reference ?? '',
+  };
+}
+
+function renderFeedbackPill() {
+  const root = $('#feedback-root');
+  if (state.me === null) {
+    root.replaceChildren();
+    return;
+  }
+
+  const button = el(
+    'button',
+    {
+      class: `feedback-pill${feedbackState.open ? ' is-open' : ''}`,
+      type: 'button',
+      title: 'Tell us what to change — this goes to the TenancyDesk team',
+      onClick: () => {
+        feedbackState.open = !feedbackState.open;
+        drawFeedback();
+      },
+    },
+    feedbackState.open ? 'Close' : 'Feedback',
+  );
+
+  root.replaceChildren(el('div', { class: 'feedback-dock' }, feedbackState.open ? feedbackPanel() : null, button));
+}
+
+function drawFeedback() {
+  renderFeedbackPill();
+  const input = $('#feedback-input');
+  if (input !== null) input.focus();
+}
+
+function feedbackMessages() {
+  const log = el('div', { class: 'feedback-log' });
+  if (feedbackState.messages.length === 0) {
+    log.append(
+      el('div', { class: 'feedback-msg agent' }, el('p', {}, 'What could be better? Say it however you like — a wish, a frustration, a thing that took too long.')),
+      el('p', { class: 'small' }, 'This reaches the team that builds TenancyDesk. It does not go to your agency.'),
+    );
+    return log;
+  }
+
+  for (const message of feedbackState.messages) {
+    log.append(
+      el(
+        'div',
+        { class: `feedback-msg ${message.role === 'agent' ? 'agent' : 'tester'}` },
+        ...renderMessageText(message.text, { markdown: message.role === 'agent' }),
+      ),
+    );
+  }
+
+  if (feedbackState.busy) log.append(el('div', { class: 'small' }, 'thinking…'));
+  return log;
+}
+
+function feedbackProposalCard() {
+  const proposal = feedbackState.proposal;
+  if (proposal === null) return null;
+
+  return el(
+    'div',
+    { class: 'feedback-proposal' },
+    el('div', { class: 'small' }, `I will file this as a ${KIND_WORDS[proposal.kind] ?? proposal.kind}`),
+    el('strong', {}, proposal.title),
+    el('p', { class: 'small' }, proposal.summary),
+    el(
+      'div',
+      { class: 'form-actions' },
+      el('span', { class: 'small' }, 'Filed under your name'),
+      el(
+        'div',
+        { style: { display: 'flex', gap: '.4rem' } },
+        el(
+          'button',
+          { class: 'btn btn-sm', type: 'button', onClick: () => fileProposal() },
+          'Yes, file it',
+        ),
+        el(
+          'button',
+          {
+            class: 'btn btn-sm btn-ghost',
+            type: 'button',
+            onClick: () => {
+              feedbackState.proposal = null;
+              const input = $('#feedback-input');
+              if (input !== null) input.focus();
+              drawFeedback();
+            },
+          },
+          'Change something',
+        ),
+      ),
+    ),
+  );
+}
+
+function feedbackForm() {
+  const what = el('textarea', { id: 'feedback-what', rows: 3, placeholder: 'What were you trying to do, and what would be better?' });
+  const submit = el(
+    'button',
+    {
+      class: 'btn btn-primary btn-sm',
+      type: 'button',
+      onClick: async () => {
+        const text = what.value.trim();
+        if (text === '') {
+          toast('Tell us what to change first.', true);
+          return;
+        }
+        submit.disabled = true;
+        try {
+          const context = feedbackContext();
+          await api('/api/feedback', {
+            method: 'POST',
+            body: JSON.stringify({
+              title: text.split('\n')[0].slice(0, 80),
+              summary: text,
+              kind: 'improvement',
+              area: context.screen === 'tenancy' ? 'other' : (context.screen || 'other'),
+              screen: context.screen,
+              packReference: context.packReference,
+              messages: [{ role: 'tester', text }],
+            }),
+          });
+          toast('Filed. The team will see it.');
+          feedbackState.open = false;
+          await loadMyFeedback();
+          drawFeedback();
+        } catch (error) {
+          toast(error.message, true);
+          submit.disabled = false;
+        }
+      },
+    },
+    'Send it',
+  );
+
+  return el(
+    'div',
+    { class: 'feedback-form' },
+    el('p', { class: 'small' }, 'The assistant is not available, so this is a plain note — it reaches the same list.'),
+    what,
+    el('div', { class: 'form-actions' }, el('span', { class: 'small' }, ''), submit),
+  );
+}
+
+function feedbackMineList() {
+  if (feedbackState.mine.length === 0) return null;
+  return el(
+    'div',
+    { class: 'feedback-mine' },
+    el('div', { class: 'small' }, 'What you have sent'),
+    ...feedbackState.mine.slice(0, 5).map((item) =>
+      el(
+        'div',
+        { class: 'feedback-mine-row' },
+        el('strong', {}, item.title),
+        el('span', { class: `badge status-${item.status}` }, item.statusWords),
+        item.publicNote === '' ? null : el('p', { class: 'small' }, item.publicNote),
+      ),
+    ),
+  );
+}
+
+function feedbackPanel() {
+  const input = el('textarea', {
+    id: 'feedback-input',
+    rows: 2,
+    placeholder: 'Type it however you like…',
+    onKeydown: (event) => {
+      if (event.key === 'Enter' && !event.shiftKey) {
+        event.preventDefault();
+        void sendFeedbackMessage();
+      }
+    },
+  });
+
+  return el(
+    'div',
+    { class: 'feedback-panel' },
+    el(
+      'div',
+      { class: 'feedback-panel-head' },
+      el('strong', {}, 'Feedback'),
+      el('span', { class: 'small' }, 'Goes to the TenancyDesk team, not your agency'),
+    ),
+    feedbackMessages(),
+    feedbackProposalCard(),
+    feedbackState.unavailable
+      ? feedbackForm()
+      : el(
+          'div',
+          { class: 'feedback-composer' },
+          input,
+          el(
+            'button',
+            {
+              class: 'btn btn-primary btn-sm',
+              type: 'button',
+              onClick: () => void sendFeedbackMessage(),
+            },
+            'Send',
+          ),
+        ),
+    feedbackMineList(),
+  );
+}
+
+async function loadMyFeedback() {
+  try {
+    const result = await api('/api/feedback/mine');
+    feedbackState.mine = result.items ?? [];
+  } catch {
+    feedbackState.mine = [];
+  }
+}
+
+async function sendFeedbackMessage() {
+  const input = $('#feedback-input');
+  if (input === null) return;
+  const text = input.value.trim();
+  if (text === '' || feedbackState.busy) return;
+
+  feedbackState.messages.push({ role: 'tester', text });
+  feedbackState.busy = true;
+  feedbackState.proposal = null;
+  input.value = '';
+  drawFeedback();
+
+  try {
+    const result = await api('/api/feedback/chat', {
+      method: 'POST',
+      body: JSON.stringify({ messages: feedbackState.messages, context: feedbackContext() }),
+    });
+
+    if (result.unavailable === true) {
+      // Never lose what they typed: keep it in the form and let them send it plainly.
+      feedbackState.unavailable = true;
+      feedbackState.busy = false;
+      drawFeedback();
+      const box = $('#feedback-what');
+      if (box !== null) box.value = feedbackState.messages.map((message) => message.text).join('\n\n');
+      return;
+    }
+
+    if (typeof result.reply === 'string' && result.reply.trim() !== '') {
+      feedbackState.messages.push({ role: 'agent', text: result.reply });
+    }
+    feedbackState.proposal = result.proposal ?? null;
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    feedbackState.busy = false;
+    drawFeedback();
+  }
+}
+
+async function fileProposal() {
+  const proposal = feedbackState.proposal;
+  if (proposal === null) return;
+  const context = feedbackContext();
+  feedbackState.busy = true;
+  drawFeedback();
+
+  try {
+    await api('/api/feedback', {
+      method: 'POST',
+      body: JSON.stringify({
+        ...proposal,
+        screen: context.screen,
+        packReference: context.packReference,
+        messages: feedbackState.messages,
+      }),
+    });
+    toast('Filed. The team will read it — thank you.');
+    feedbackState.open = false;
+    feedbackState.messages = [];
+    feedbackState.proposal = null;
+    await loadMyFeedback();
+  } catch (error) {
+    toast(error.message, true);
+  } finally {
+    feedbackState.busy = false;
+    drawFeedback();
+  }
+}
+
+/* ------------------------------------------------------ feedback, operator --- */
+
+/** The queue: the operator's side, and nobody else's. */
+function renderFeedbackQueue() {
+  const box = el('div', { class: 'bo-grid' }, el('p', { class: 'small' }, 'Loading feedback…'));
+
+  void (async () => {
+    let data;
+    try {
+      data = await api('/api/feedback/queue');
+    } catch (error) {
+      box.replaceChildren(el('div', { class: 'notice notice-err' }, error.message));
+      return;
+    }
+
+    const counts = data.counts ?? {};
+    const rows = (data.items ?? []).map((item) => {
+      const note = el('input', { type: 'text', placeholder: 'Note to yourself', value: item.operatorNote ?? '' });
+      const publicNote = el('input', { type: 'text', placeholder: 'What to tell them (they see this)', value: item.publicNote ?? '' });
+      const status = el(
+        'select',
+        {},
+        ...(data.statuses ?? []).map((entry) => el('option', { value: entry.value, selected: entry.value === item.status }, entry.label)),
+      );
+
+      return el(
+        'div',
+        { class: 'bo-row feedback-row' },
+        el(
+          'div',
+          { class: 'bo-what' },
+          el(
+            'strong',
+            {},
+            item.title,
+            item.clusterCount > 1 ? el('span', { class: 'badge badge-ok' }, `asked ${item.clusterCount} times`) : null,
+            item.needsReview.length > 0 ? el('span', { class: 'badge badge-warn' }, 'needs a look') : null,
+          ),
+          el('span', {}, `${KIND_WORDS[item.kind] ?? item.kind} · ${item.userName} (${item.role})${item.screen === '' ? '' : ` · ${item.screen}`} · ${new Date(item.createdAt).toLocaleString('en-GB')}`),
+          el('p', { class: 'small' }, item.summary),
+          item.needsReview.length > 0
+            ? el('p', { class: 'small', style: { color: 'var(--warn-ink, #8a5a12)' } }, `Flagged: ${item.needsReview.join('; ')}`)
+            : null,
+        ),
+        el(
+          'div',
+          { class: 'feedback-controls' },
+          status,
+          note,
+          publicNote,
+          el(
+            'button',
+            {
+              class: 'btn btn-sm',
+              type: 'button',
+              onClick: async () => {
+                try {
+                  await api(`/api/feedback/${item.id}`, {
+                    method: 'PATCH',
+                    body: JSON.stringify({
+                      status: status.value,
+                      operatorNote: note.value,
+                      publicNote: publicNote.value,
+                    }),
+                  });
+                  toast('Saved.');
+                } catch (error) {
+                  toast(error.message, true);
+                }
+              },
+            },
+            'Save',
+          ),
+        ),
+      );
+    });
+
+    box.replaceChildren(
+      el(
+        'div',
+        { class: 'bo-section' },
+        el(
+          'div',
+          { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' } },
+          el('h3', {}, `Feedback · ${data.items?.length ?? 0}`),
+          el('a', { class: 'btn btn-sm', href: '/api/feedback/export?private=1' }, 'Export as Markdown'),
+        ),
+        el(
+          'p',
+          { class: 'small' },
+          `New ${counts.new ?? 0} · Being looked at ${counts.triaged ?? 0} · On the list ${counts.planned ?? 0} · Done ${counts.done ?? 0} · Not doing ${counts.declined ?? 0}`,
+        ),
+        el('p', { class: 'small' }, 'Only the product owner sees this. An agency owner never sees a landlord’s feedback.'),
+      ),
+      rows.length === 0 ? el('div', { class: 'notice notice-info' }, 'Nothing yet.') : el('div', { class: 'bo-section' }, ...rows),
+    );
+  })();
+
+  return box;
+}
+
 /* ----------------------------------------------------------- back office --- */
 
 /**
@@ -2295,13 +2729,17 @@ const BO_TABS = [
   ['people', 'Landlords & tenants', ['owner', 'agent']],
   ['documents', 'Our documents', ['owner', 'agent']],
   ['access', 'People & access', ['owner']],
+  ['feedback', 'Feedback', ['owner'], true],
   ['health', 'Health & backup', ['owner']],
   ['tidy', 'Tidy up', ['owner']],
 ];
 
 /** The tabs this person is allowed to see, in order. */
 function backOfficeTabs() {
-  return BO_TABS.filter(([, , roles]) => roles.includes(myRole()));
+  // The feedback queue is the product owner's, not the agency's: `operatorOnly`.
+  return BO_TABS.filter(([, , roles, operatorOnly]) =>
+    roles.includes(myRole()) && (operatorOnly !== true || state.me?.isOperator === true),
+  );
 }
 
 /** Load the agency's own records, uploads and health figures. */
@@ -2402,6 +2840,7 @@ function renderBackOffice(main) {
   else if (current === 'people') body = renderPeopleSection(data);
   else if (current === 'documents') body = renderOurDocumentsSection();
   else if (current === 'access') body = renderAccessSection();
+  else if (current === 'feedback') body = renderFeedbackQueue();
   else if (current === 'health') body = renderHealthSection();
   else if (current === 'tidy') body = renderMigrationSection(data);
   else body = renderSettingsSection(data);

@@ -94,15 +94,41 @@ const LANDLORD_READS: RegExp[] = [
   /^\/api\/backoffice$/,
   /^\/api\/due$/,
   /^\/api\/calendar\.ics$/,
+  /^\/api\/feedback\/mine$/,
 ];
 
-/** Only the owner may do these, signed in or not. */
-const OWNER_ONLY: RegExp[] = [
-  /^\/api\/users(\/.*)?$/,
-  /^\/api\/access(\/.*)?$/,
-  /^\/api\/settings$/,
-  /^\/api\/backup$/,
-  /^\/api\/backoffice\/migrate\//,
+/**
+ * Writes a landlord may still make. Reading is the default for a landlord, but
+ * complaining about the software is not a change to a tenancy, and it would be a poor
+ * joke to tell a landlord they are not allowed to.
+ */
+const LANDLORD_WRITES: RegExp[] = [/^\/api\/feedback$/, /^\/api\/feedback\/chat$/];
+
+type Rule = { methods: '*' | string[]; pattern: RegExp };
+
+function matches(rule: Rule, method: string, path: string): boolean {
+  if (rule.methods !== '*' && !rule.methods.includes(method)) return false;
+  return rule.pattern.test(path);
+}
+
+/** Only the owner of the *agency* may do these. */
+const OWNER_ONLY: Rule[] = [
+  { methods: '*', pattern: /^\/api\/users(\/.*)?$/ },
+  { methods: '*', pattern: /^\/api\/access(\/.*)?$/ },
+  { methods: '*', pattern: /^\/api\/settings$/ },
+  { methods: '*', pattern: /^\/api\/backup$/ },
+  { methods: '*', pattern: /^\/api\/backoffice\/migrate\// },
+];
+
+/**
+ * Only the *operator* — the person who owns the product — may do these. Kept separate
+ * from the owner rules on purpose: feedback is addressed to the platform, so an agency
+ * owner must not be able to read what their own landlord said about them.
+ */
+const OPERATOR_ONLY: Rule[] = [
+  { methods: ['GET'], pattern: /^\/api\/feedback\/queue$/ },
+  { methods: ['GET'], pattern: /^\/api\/feedback\/export$/ },
+  { methods: ['PATCH'], pattern: /^\/api\/feedback\/[^/]+$/ },
 ];
 
 export type GuardDeps = {
@@ -180,15 +206,20 @@ export function registerAuthGuard(app: FastifyInstance, deps: GuardDeps): void {
 
     const user = found.user;
 
-    if (OWNER_ONLY.some((pattern) => pattern.test(path)) && !isOwner(user)) {
+    if (OWNER_ONLY.some((rule) => matches(rule, request.method, path)) && !isOwner(user)) {
       return reply.code(403).send({ error: 'Only the owner account can do that.' });
     }
 
+    if (OPERATOR_ONLY.some((rule) => matches(rule, request.method, path)) && !user.isOperator) {
+      return reply.code(403).send({ error: 'That is the product owner’s list, not part of your account.' });
+    }
+
     if (isLandlord(user)) {
-      if (request.method !== 'GET') {
+      const mayWriteHere = LANDLORD_WRITES.some((pattern) => pattern.test(path)) && request.method === 'POST';
+      if (request.method !== 'GET' && !mayWriteHere) {
         return reply.code(403).send({ error: 'Your access is read-only. Ask the agency to make a change.' });
       }
-      if (!LANDLORD_READS.some((pattern) => pattern.test(path))) {
+      if (request.method === 'GET' && !LANDLORD_READS.some((pattern) => pattern.test(path))) {
         return reply.code(403).send({ error: 'That is not part of your access.' });
       }
       if (!landlordOwnsPath(request, deps)) {

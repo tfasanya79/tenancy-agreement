@@ -159,6 +159,25 @@ What each role may call is enforced once, in `src/auth/guard.ts`, before any rou
 runs: see [docs/MULTI-USER.md](MULTI-USER.md). A landlord reaching for another
 landlord's pack gets `404`, not `403`, so the reply says nothing about what exists.
 
+## Feedback
+
+Anyone with an account may file feedback — including a landlord, whose access is otherwise
+read-only. Reading somebody else's is the operator's alone: an agency owner is refused,
+because feedback is addressed to the platform and not to the agency it is about.
+
+| Method | Path | Who | What |
+| --- | --- | --- | --- |
+| `POST` | `/api/feedback/chat` | any signed-in user | One turn of the conversation: `{ messages, context: { screen, packReference } }` → `{ reply, proposal }`. `proposal` is a suggested record, **not** a filed one; `unavailable: true` means the assistant is off and the interface should show the form |
+| `POST` | `/api/feedback` | any signed-in user | Files the record: `{ kind, title, summary, area, sentiment?, screen?, packReference?, messages[] }` → `201 { feedback }`. Five an hour, then `429` |
+| `GET` | `/api/feedback/mine` | any signed-in user | Their own submissions, with `statusWords` for the interface |
+| `GET` | `/api/feedback/queue` | **operator** | `{ items, counts, statuses, kinds, areas }` |
+| `PATCH` | `/api/feedback/:id` | **operator** | `{ status?, operatorNote?, publicNote? }` — the public note is shown to the tester |
+| `GET` | `/api/feedback/export` | **operator** | Markdown; `?private=1` includes the operator's own notes |
+| `GET` | `/api/feedback/summary` | any | Counts for the tab title; empty for anyone without the operator flag |
+
+Who is an operator is set at startup from `OPERATOR_EMAILS`, not from a role: it is the
+product owner, not the agency owner. See [docs/FEEDBACK.md](FEEDBACK.md).
+
 ## Packs
 
 **`GET /api/packs`** — no body. Newest `updatedAt` first, built by

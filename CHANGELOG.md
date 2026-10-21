@@ -19,6 +19,39 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Added — the FEEDBACK button, and the queue behind it
+
+A button in the corner of every screen, for everyone with an account. Type what you want
+in your own words; a small assistant says back what it understood and offers a one-line
+record to confirm before anything is sent. Then it goes to the queue of the person who
+owns the product — never to the agency, so a landlord can say what they like about the
+software without it landing on their agent's desk.
+
+- **Everyone can file**, including landlords, whose access is otherwise read-only. The
+  rules in `src/auth/guard.ts` became method-aware to allow exactly that: a person who
+  may not change a tenancy may still complain about the app.
+- **The operator is a flag, not a role.** `users.is_operator`, set at startup from
+  `OPERATOR_EMAILS`, applied to accounts as they are created. An agency owner is not an
+  operator, and the tests assert it — otherwise a promise made in the interface would be
+  false the moment a second agency exists.
+- **The conversation cannot file anything.** Its schema arrives as a *proposal* that the
+  interface files after the tester agrees, so the confirmation lives in the code path
+  rather than in a prompt's good behaviour. It has no pack tools, never sees tenancy data,
+  and is told never to promise a fix or a date.
+- **Nothing is lost when the model is missing.** With `OFFLINE_MODE`, no key, or DeepSeek
+  unreachable, the same panel becomes a plain form that files the same record.
+- **The queue can be worked**: statuses (`new → triaged → planned → done / declined`),
+  duplicates grouped by cheap word similarity and counted (*asked 4 times*), a note to
+  yourself and a note the tester sees, and Markdown export.
+- **Two things are flagged for a human**: anything that looks like somebody else's
+  personal data, and anything that looks like a promise — on either side of the
+  conversation.
+
+22 tests in `tests/feedback.test.ts`, mostly about refusals: an agency owner gets `403`
+on the queue, an agent gets `403`, a landlord may file but not read, and a landlord cannot
+see another's submissions. Documentation: `docs/FEEDBACK.md` is now a record of what was
+built rather than a plan; `docs/API.md` and `docs/USING-THE-APP.md` describe the routes
+and the button.
 ### Added — a plan for the feedback engine
 
 `docs/FEEDBACK.md` sets out the FEEDBACK button: everyone with an account can file an

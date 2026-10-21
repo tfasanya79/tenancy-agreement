@@ -36,6 +36,12 @@ export type User = {
   createdAt: string;
   disabledAt: string | null;
   lastLoginAt: string | null;
+  /**
+   * May read and work the product's feedback queue. This is not an agency role: it is
+   * the product owner's flag, so an agency owner does not inherit a landlord's words
+   * about their own agency.
+   */
+  isOperator: boolean;
 };
 
 export type Session = {
@@ -72,7 +78,8 @@ CREATE TABLE IF NOT EXISTS users (
   landlord_id   TEXT,
   created_at    TEXT NOT NULL,
   disabled_at   TEXT,
-  last_login_at TEXT
+  last_login_at TEXT,
+  is_operator   INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE IF NOT EXISTS sessions (
@@ -109,6 +116,7 @@ type UserRow = {
   created_at: string;
   disabled_at: string | null;
   last_login_at: string | null;
+  is_operator: number;
 };
 
 type SessionRow = {
@@ -150,6 +158,7 @@ function mapUser(row: UserRow): User {
     createdAt: row.created_at,
     disabledAt: row.disabled_at ?? null,
     lastLoginAt: row.last_login_at ?? null,
+    isOperator: row.is_operator === 1,
   };
 }
 
@@ -187,10 +196,41 @@ export type NewUser = {
 
 export class AuthStore {
   readonly #db: DatabaseSync;
+  /** Emails that own the product. Applied to every account as it is created. */
+  readonly #operatorEmails: Set<string>;
 
-  constructor(db: DatabaseSync) {
+  constructor(db: DatabaseSync, operatorEmails: readonly string[] = []) {
     this.#db = db;
+    this.#operatorEmails = new Set(operatorEmails.map((email) => normaliseEmail(email)).filter((email) => email !== ''));
     this.#db.exec(SCHEMA);
+    // An installation created before the operator flag existed keeps its rows; add it.
+    const columns = this.#db.prepare('PRAGMA table_info(users)').all() as Array<{ name: string }>;
+    if (!columns.some((column) => column.name === 'is_operator')) {
+      this.#db.exec('ALTER TABLE users ADD COLUMN is_operator INTEGER NOT NULL DEFAULT 0');
+    }
+  }
+
+  /**
+   * Mark the people who own the product, from `OPERATOR_EMAILS`.
+   *
+   * A flag rather than a role, because it is not about the agency: the operator reads
+   * feedback addressed to the platform, which an agency must never see. Doing it at
+   * startup means a fresh installation needs no SQL by hand, and revoking it is a
+   * restart with a shorter list.
+   */
+  syncOperators(emails: readonly string[] = [...this.#operatorEmails]): void {
+    const wanted = new Set(emails.map((email) => normaliseEmail(email)).filter((email) => email !== ''));
+    const rows = this.#db.prepare('SELECT id, email, is_operator FROM users').all() as unknown as Array<{
+      id: string;
+      email: string;
+      is_operator: number;
+    }>;
+    for (const row of rows) {
+      const shouldBe = wanted.has(row.email) ? 1 : 0;
+      if (row.is_operator !== shouldBe) {
+        this.#db.prepare('UPDATE users SET is_operator = ? WHERE id = ?').run(shouldBe, row.id);
+      }
+    }
   }
 
   // --- people -------------------------------------------------------------
@@ -236,10 +276,19 @@ export class AuthStore {
     const passwordHash = await hashPassword(input.password);
     this.#db
       .prepare(
-        `INSERT INTO users (id, email, name, role, password_hash, landlord_id, created_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?)`,
+        `INSERT INTO users (id, email, name, role, password_hash, landlord_id, created_at, is_operator)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
       )
-      .run(id, email, input.name.trim(), input.role, passwordHash, input.landlordId ?? null, nowIso());
+      .run(
+        id,
+        email,
+        input.name.trim(),
+        input.role,
+        passwordHash,
+        input.landlordId ?? null,
+        nowIso(),
+        this.#operatorEmails.has(email) ? 1 : 0,
+      );
 
     const created = this.getUser(id);
     if (created === null) throw new Error('The account could not be created.');

@@ -69,6 +69,8 @@ function publicUser(user: User, backOffice: BackOffice): Record<string, unknown>
     landlordName: landlord?.name ?? null,
     lastLoginAt: user.lastLoginAt,
     createdAt: user.createdAt,
+    /** True for the person who owns the product: they alone read the feedback queue. */
+    isOperator: user.isOperator,
   };
 }
 

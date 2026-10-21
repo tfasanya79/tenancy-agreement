@@ -247,6 +247,32 @@ tenancy. It is where a detail is written once instead of on every pack.
 Nothing in the back office is required. A tenancy works with the details typed on
 its own pack; the records just mean you stop typing them twice.
 
+## Saying what should change
+
+There is a **Feedback** button in the bottom-right corner of every screen, for everybody
+with an account — including landlords, who are otherwise read-only.
+
+Press it and say what you want in your own words: a wish, a frustration, a thing that
+took longer than it should. If the assistant is on, it will say back what it understood
+and offer you a one-line record — *"I will file this as a new feature: Filter the document
+list"* — which you can accept or correct before anything is sent. There is no sign-up, no
+ticket number, and no form to fill in unless the assistant is switched off, in which case
+the same box takes a plain note.
+
+Two things are worth knowing:
+
+- **It goes to the team that builds TenancyDesk, not to your agency.** A landlord's
+  feedback is never shown to the agency it is about.
+- **Nothing is promised.** The assistant will not say when something will be done,
+  because it does not know.
+
+You can see what you have sent, and its state — *Sent*, *Being looked at*, *On the list*,
+*Done* — in the same panel, under "What you have sent".
+
+The person who owns the product reads it all in **Back office → Feedback**: a queue with
+statuses, duplicates counted (*asked 4 times*), anything containing personal data or a
+promise flagged for a careful read, and an export to Markdown.
+
 ## A normal week
 
 **Monday — new tenancy agreed**

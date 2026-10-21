@@ -19,7 +19,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 300 tests on `node:test` |
+| Tests | `tests/` | 322 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -224,6 +224,11 @@ users          id, email (unique), name, role, password_hash, landlord_id,
 sessions       id (sha256 of the cookie token), user_id → users.id,
                created_at, last_seen_at, expires_at, ip, user_agent
 events         id, pack_id, actor_id, actor_name, kind, detail, at
+
+feedback       id, user_id, user_name, role, kind, title, summary, area, screen,
+               pack_reference, status, cluster_id, needs_review, operator_note,
+               public_note, created_at, done_at
+feedback_msgs  id, feedback_id → feedback.id, role (tester|agent), text, at
 ```
 
 **Why `fields_json` and not a normalised table?** A pack's fields are an open,
@@ -295,6 +300,7 @@ data directory.
 | Add or change an endpoint | `src/app.ts` |
 | Change the interface | `public/app.js`, `public/styles.css` |
 | Change who may do what | `src/auth/guard.ts` (the route rules) and `renderIdentity` in `public/app.js` (what is offered) |
+| Change what the feedback assistant may do | `src/feedback/chat.ts` (the prompt and the proposal schema) |
 | Change session length or password strength | `SESSION_HOURS`, `SESSION_MAX_DAYS` in `src/auth/store.ts`; `MIN_PASSWORD_LENGTH` in `src/auth/passwords.ts` |
 | Record a new kind of activity | call `note(request, kind, detail, packId)` in `src/app.ts`, then add the wording to `EVENT_WORDS` in `public/app.js` |
 | Change the ZIP contents sheet | `src/docs/packSummary.ts` |

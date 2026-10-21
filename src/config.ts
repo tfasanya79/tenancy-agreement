@@ -23,6 +23,8 @@ export type AppConfig = {
     redressScheme: string;
   };
   offlineMode: boolean;
+  /** Emails that own the product and may read the feedback queue. */
+  operatorEmails: string[];
 };
 
 function env(name: string, fallback = ''): string {
@@ -62,6 +64,10 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       redressScheme: env('AGENCY_REDRESS_SCHEME'),
     },
     offlineMode: envBool('OFFLINE_MODE', false),
+    operatorEmails: env('OPERATOR_EMAILS')
+      .split(',')
+      .map((email) => email.trim())
+      .filter((email) => email !== ''),
     ...overrides,
   };
   return config;

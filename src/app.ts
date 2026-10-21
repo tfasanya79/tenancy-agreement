@@ -36,6 +36,8 @@ import { CustomTemplateStore } from './backoffice/customTemplates.ts';
 import { AuthStore } from './auth/store.ts';
 import { currentUser, isLandlord, registerAuthGuard, requireUser } from './auth/guard.ts';
 import { registerAuthRoutes } from './auth/routes.ts';
+import { FeedbackStore } from './feedback/store.ts';
+import { registerFeedbackRoutes } from './feedback/routes.ts';
 import { buildReplacements, extractDocxText, fillDocx, fillDocxBlanks, formatLike, resolveFieldPath } from './docs/docxFill.ts';
 import { proposeLinks } from './docs/linkProposal.ts';
 import { auditDocumentText } from './docs/templateAudit.ts';
@@ -150,10 +152,19 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
 
   // Who may do what. Registered before any route, so every route below is behind
   // the guard: a request without a session is refused before it is handled.
-  const auth = new AuthStore(store.handle);
+  const auth = new AuthStore(store.handle, config.operatorEmails);
   auth.purgeExpiredSessions();
+  // Who owns the product, from OPERATOR_EMAILS: they alone read the feedback queue.
+  auth.syncOperators(config.operatorEmails);
+  const feedback = new FeedbackStore(store.handle);
   registerAuthGuard(app, { auth, store });
   registerAuthRoutes(app, { auth, backOffice });
+  registerFeedbackRoutes(app, {
+    feedback,
+    client,
+    assistantAvailable: !config.offlineMode && client.configured,
+  });
+
   /** Record something for the person making this request. */
   const note = (request: FastifyRequest, kind: string, detail: string, packId: string | null = null) => {
     auth.record({ packId, actor: currentUser(request), kind, detail });

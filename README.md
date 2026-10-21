@@ -388,6 +388,7 @@ tenancy-agreement/
 │   ├── app.ts                 every HTTP route
 │   ├── config.ts              .env reading
 │   ├── auth/                  accounts, sessions, roles and the audit trail
+│   ├── feedback/              the FEEDBACK record, its conversation and the queue
 │   ├── db.ts                  SQLite: packs, documents, agent runs
 │   ├── docs/
 │   │   ├── fields.ts          the catalogue of details a pack holds
@@ -415,7 +416,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     300 tests
+├── tests/                     322 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -432,7 +433,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 300 tests |
+| `pnpm test` | Run the 322 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm golden` | Record the rendered text of every template, so a wording change is a deliberate act |
@@ -521,7 +522,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | [docs/BACKOFFICE.md](docs/BACKOFFICE.md) | Design for the back office: landlords, properties, rooms, tenants, prefilled forms |
 | [docs/MULTI-USER.md](docs/MULTI-USER.md) | Accounts, the three roles, what a landlord may see, the audit trail, and what it does not cover |
 | [docs/PLATFORM.md](docs/PLATFORM.md) | **Design for review, not built:** many agencies per installation, one database per organisation, and link-based access for tenants |
-| [docs/FEEDBACK.md](docs/FEEDBACK.md) | **Plan, not built:** the FEEDBACK button, what the assistant may and may not do, the operator queue, and four phases |
+| [docs/FEEDBACK.md](docs/FEEDBACK.md) | The FEEDBACK button, what the assistant may and may not do, and the operator queue |
 | [docs/TENANT-RECORDS.md](docs/TENANT-RECORDS.md) | Exactly what the client's documents record — the authoritative field list |
 | [SECURITY.md](SECURITY.md) | Data handling and hardening |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Changing templates, rules or code |
@@ -534,13 +535,14 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 300 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 322 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
 | Room-by-room lettings | ✅ `property.room_number`, first payment date derived from the start date |
 | Back office — landlords, properties, rooms, tenants | ✅ records, screens, and a migration that links the packs you already have |
 | Accounts, roles and an audit trail | ✅ owner / agent / landlord, scrypt passwords, sessions, first-run setup, and a History tab that names the person — [docs/MULTI-USER.md](docs/MULTI-USER.md) |
+| A FEEDBACK button and a queue to work it | ✅ everyone with an account can file; an assistant reflects it back before filing; the operator gets a queue with statuses, duplicates counted, and personal data flagged — [docs/FEEDBACK.md](docs/FEEDBACK.md) |
 | Prefilled forms | ✅ a new tenancy in an existing room needs three typed details; every other value is inherited and labelled with where it came from |
 | Tenancy lifecycle | ✅ upcoming, active, ending, ended — the pack list is grouped by it |
 | Shared values warn before they change | ✅ editing a room's rent says how many tenancies inherit it and asks first |
@@ -572,7 +574,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 300 tests
+pnpm test        # 322 tests
 pnpm typecheck
 ```
 

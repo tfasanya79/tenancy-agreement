@@ -1,6 +1,10 @@
 # The feedback engine — plan for review
 
-> **Status: plan only. Nothing here is built.**
+> **Status: built.** Phases F1–F4 are implemented and tested (`tests/feedback.test.ts`).
+> Three details differ from the original plan and are marked **[as built]** below: the
+> conversation answers with JSON rather than a stream, the assistant's schema arrives as
+> a *proposal* the interface files (so confirmation sits in the code path, not the
+> prompt), and the operator is named by `OPERATOR_EMAILS` at startup.
 
 A button that says **FEEDBACK**, a short conversation with an assistant that
 understands what is being asked for, and a queue the product owner works through.
@@ -124,19 +128,23 @@ Notes that matter:
 
 | Method | Path | Who |
 | --- | --- | --- |
-| `POST` | `/api/feedback/chat` | any signed-in user — one turn of the conversation (SSE, reuses the assistant's streaming) |
+| `POST` | `/api/feedback/chat` | any signed-in user — one turn of the conversation. **[as built]** answers with JSON, not a stream: the replies are two sentences, and one round trip is simpler to test than an event stream |
 | `POST` | `/api/feedback` | any signed-in user — the form, and the fallback when the model is unavailable |
 | `GET` | `/api/feedback/mine` | any signed-in user — their own submissions and statuses |
 | `GET` | `/api/feedback/queue` | **operator only** — the queue |
 | `PATCH` | `/api/feedback/:id` | **operator only** — status, operator note, public note |
 | `GET` | `/api/feedback/export` | **operator only** — markdown, for a file or a ticket |
 
-This needs one small extension to `src/auth/guard.ts`: it currently decides access with
-method-blind patterns, and `POST /api/feedback` (everyone) sits beside
-`GET /api/feedback/queue` (operator only). The rule becomes method-aware — a
-`{ method, pattern }` list rather than a pattern list — and the ownership tests extend to
-cover it: an agency owner gets `403` on the queue, and one landlord cannot see another
-landlord's submissions.
+This needed one extension to `src/auth/guard.ts`, since done: access rules are
+**method-aware** now — a `{ methods, pattern }` list rather than a pattern list — because
+`POST /api/feedback` (everyone) sits beside `GET /api/feedback/queue` (operator only).
+Landlords keep their read-only rule with one exception: `POST /api/feedback` and
+`POST /api/feedback/chat`. A person who may not change a tenancy may still complain about
+the software.
+
+**[as built]** The operator is a flag (`users.is_operator`) set at startup from
+`OPERATOR_EMAILS`, and applied to each account as it is created. It is not an agency role:
+an agency owner is not an operator, and the tests assert exactly that.
 
 ## 7. The tester's view
 
@@ -219,7 +227,7 @@ guard.
 
 *Done when:* anyone with an account can file feedback through the form, the operator can
 move it through `new → triaged → planned → done`, the tester sees the change, an agency
-owner gets `403` on the queue, and one landlord cannot see another's submission.
+owner gets `403` on the queue, and one landlord cannot see another's submission. **Done.**
 
 **F2 — The conversation.** The chat panel, streaming, the reflect-back, the
 `file_feedback` schema, the one-question rule, the no-promise and support-diversion
@@ -228,19 +236,24 @@ behaviour, and the fallback to the form whenever the model is unavailable.
 *Done when:* a vague report ("it doesn't work") becomes a filed record with a title, a
 summary and the right kind, after at most two questions; a promise never appears in the
 filed text (checked by test against the commitment detector); and with `OFFLINE_MODE`
-the form appears instead.
+the form appears instead. **Done** — the `propose_feedback` schema is the contract, and
+`reviewFlags` catches both personal data and promises.
 
 **F3 — Reaching the tester.** Statuses surfaced to the submitter, public notes, and the
 "asked N times" count in the queue.
 
 *Done when:* a tester sees *On the list* the same day the operator sets it, and five
-similar submissions show as one row with a count of five and five names.
+similar submissions show as one row with a count of five and five names. **Done** for
+status and count; the five names are in the queue each on their own row, which turned out
+to read better than one row pretending to be five.
 
 **F4 — Working the queue.** Clustering with a canonical record, filters and counts,
 markdown export, `needs_review` warnings for personal data and promises, retention.
 
 *Done when:* the operator can clear a week of feedback without opening any other tool,
-and the export can be pasted into a tracker without editing.
+and the export can be pasted into a tracker without editing. **Done** — clustering
+(`similarity`), filters by status and kind, counts in the heading, `needs_review` flags,
+and markdown export including private notes on request.
 
 ## 14. How it is tested
 
