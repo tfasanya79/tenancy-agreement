@@ -19,6 +19,17 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Added — a plan for the feedback engine
+
+`docs/FEEDBACK.md` sets out the FEEDBACK button: everyone with an account can file an
+idea, a complaint or a confusion, a short conversation reflects it back before filing,
+and the operator works a queue rather than reading a log.
+
+Three decisions are already fixed in it: the button is for everybody, a landlord's words
+**never** reach their agency (so the queue is operator-only, not agency-owner), and the
+plan builds the record and the queue *first* — the chat is a better front door, and the
+plain form beneath it keeps working when the model does not. It also records what the
+assistant may never do: touch a tenancy, promise a fix, or act as a support desk.
 ### Fixed — a lost write-ahead log, and the recovery
 
 A live installation lost a day's work without anything appearing to fail. The cause:

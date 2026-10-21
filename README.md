@@ -521,6 +521,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | [docs/BACKOFFICE.md](docs/BACKOFFICE.md) | Design for the back office: landlords, properties, rooms, tenants, prefilled forms |
 | [docs/MULTI-USER.md](docs/MULTI-USER.md) | Accounts, the three roles, what a landlord may see, the audit trail, and what it does not cover |
 | [docs/PLATFORM.md](docs/PLATFORM.md) | **Design for review, not built:** many agencies per installation, one database per organisation, and link-based access for tenants |
+| [docs/FEEDBACK.md](docs/FEEDBACK.md) | **Plan, not built:** the FEEDBACK button, what the assistant may and may not do, the operator queue, and four phases |
 | [docs/TENANT-RECORDS.md](docs/TENANT-RECORDS.md) | Exactly what the client's documents record — the authoritative field list |
 | [SECURITY.md](SECURITY.md) | Data handling and hardening |
 | [CONTRIBUTING.md](CONTRIBUTING.md) | Changing templates, rules or code |
