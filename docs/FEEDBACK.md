@@ -124,7 +124,60 @@ Notes that matter:
 - **`pack_reference`, never the pack.** The screen and the reference are enough to
   reproduce a report; the tenancy's contents have no business being involved.
 
-## 6. Routes
+## 6. Where it is stored — and why that has to change
+
+Feedback lives in **the tenancy database**, `data/tenancydesk.db`, in the `feedback` and
+`feedback_messages` tables, beside the packs. Everything else in that file is an agency's
+tenant data, and feedback is not: it is the product's own record, addressed to the person
+who owns the product rather than to the agency it was written about.
+
+Three things follow, and none of them are accidental:
+
+- **It is covered by the backup that already runs.** The hourly snapshot copies the whole
+  database, so feedback is in every archive alongside the tenancies. Nothing extra to
+  maintain, and one place to restore from.
+- **It is in the file an agency's data lives in.** Today that is harmless — there is one
+  agency, and the person who owns the product is the person who owns the agency. It stops
+  being harmless the moment a second agency exists.
+- **It must move when the platform arrives.** In the design in
+  [docs/PLATFORM.md](PLATFORM.md) each organisation gets its own database file and the
+  control database holds what belongs to the platform — identities, memberships, plans.
+  **Feedback belongs in the control database**, for exactly the reason the operator flag
+  exists: if it stayed in an agency's file, the day that file is exported, copied for a
+  backup or handed to the agency, their landlord's words about them go with it.
+
+Until then, two rules hold: the queue is a route the operator alone may call (§5), and the
+backup archives must be treated as containing both — which they already are, being
+root-only and 600.
+
+## 7. Retention: nothing is deleted until somebody resolves it
+
+- **A record is kept indefinitely.** There is no expiry, no purge job, and **no delete
+  route**: not for the tester, not for the operator. `DELETE /api/feedback/:id` does not
+  exist, and a test asserts that it stays that way.
+- **Marking something `done` or `declined` is a status, not a deletion.** The record stays
+  in the queue afterwards, with its date, its tester, the conversation and the outcome, so
+  "we said no to this in March, and here is why" survives. The tester keeps seeing it in
+  their own list, with the outcome and any note.
+- **Declining does not recycle it either.** A declined ask is excluded from duplicate
+  clustering — a refused idea must not gather apparent support for a new one — but the
+  record itself is untouched.
+- **The only thing that removes feedback is dropping the database**, which is the same act
+  as removing every tenancy.
+
+That is deliberate policy, not an omission: a feedback list that quietly forgets is a list
+nobody trusts, and the value of the queue is in the pattern across months, not the items in
+it today. If a purge is ever wanted, it should be an explicit, dated action that writes an
+event — not a background job.
+
+## 8. Rate limits
+
+Five submissions per person per hour, and forty conversation turns. Both are **in memory**:
+a restart clears them, which is the right trade for a first version — the limit exists to
+stop a stuck client or a bored one, not to police a team. A person who hits it is told so
+in plain words, and their earlier submissions are unaffected.
+
+## 9. Routes
 
 | Method | Path | Who |
 | --- | --- | --- |
@@ -146,21 +199,21 @@ the software.
 `OPERATOR_EMAILS`, and applied to each account as it is created. It is not an agency role:
 an agency owner is not an operator, and the tests assert exactly that.
 
-## 7. The tester's view
+## 10. The tester's view
 
 A panel, not a page: their last few submissions with status words a person understands
 (*Sent · Being looked at · On the list · Done*), the public note if there is one, and
 the button again. No history of the conversation reopened by default; the record is
 theirs, so it can be read, but the point of the panel is "it went somewhere".
 
-## 8. The operator queue
+## 11. The operator queue
 
 A **Feedback** tab, visible only to the operator, with:
 
 - counts by status in the tab title, so an unread pile announces itself;
 - filters: kind, status, area, and "needs a look";
 - each row: kind, title, the tester's summary, who and what role, the screen, when, and
-  **how many others asked for the same thing** (§9);
+  **how many others asked for the same thing** (§12);
 - actions: set status, write the operator note (private) and the public note (shown to
   the tester);
 - export to markdown, so an idea can go into an issue tracker, a roadmap or a
@@ -169,7 +222,7 @@ A **Feedback** tab, visible only to the operator, with:
 Working through a queue is the whole point: a list you cannot change state on is a
 museum.
 
-## 9. Duplicates
+## 12. Duplicates
 
 The same idea arrives four times from four people, and the fifth is the one that makes
 you build it. So at filing time, compare the new record against the last few hundred
@@ -182,7 +235,7 @@ count.
   still see it and its status.
 - Consolidation is a human act: the operator can mark a cluster as the canonical one.
 
-## 10. When the model is not there
+## 13. When the model is not there
 
 `OFFLINE_MODE`, no API key or a DeepSeek failure must not remove the feature:
 
@@ -194,7 +247,7 @@ count.
 
 That fallback is also the first phase, so the queue is useful before any AI exists.
 
-## 11. Privacy
+## 14. Privacy
 
 - **Nothing about the tenancy goes to DeepSeek.** The question to the model is the
   tester's words plus the screen name. Not the pack, not the fields, not the documents.
@@ -203,21 +256,21 @@ That fallback is also the first phase, so the queue is useful before any AI exis
   look like they contain it, and puts those in front of a human. That is cheaper than
   pretending it will not happen, and it is the same stance as the rest of the product:
   record it, do not silently lose it.
-- **Retention**: feedback is the platform's own data. Nothing in it needs to live for
-  ever — a twelve-month default with an export for anything kept longer is enough, and
-  it should be written into the privacy notice rather than left to chance.
+- **Retention**: kept until somebody resolves it, and then kept anyway — see §7. That is
+  the policy, so the privacy notice should say it plainly rather than promise a tidy
+  expiry that does not exist.
 - **A landlord's words never reach the agency.** This is a promise made in the
   interface, so it needs to be true in the code: organisation-scoped queries for
   everything else, and no route that returns feedback to an agency owner.
 
-## 12. What we deliberately do not do
+## 15. What we deliberately do not do
 
 Auto-create tickets in an external tracker · email notifications (in-app first) ·
 promise timelines · let the assistant change anything in a tenancy · anonymous
 feedback · sentiment dashboards · let a tester see anyone else's feedback, even
 counted · treat the button as a support channel.
 
-## 13. Phases
+## 16. Phases
 
 Each phase is shippable and testable on its own.
 
@@ -255,7 +308,7 @@ and the export can be pasted into a tracker without editing. **Done** — cluste
 (`similarity`), filters by status and kind, counts in the heading, `needs_review` flags,
 and markdown export including private notes on request.
 
-## 14. How it is tested
+## 17. How it is tested
 
 | Area | Test |
 | --- | --- |
@@ -270,7 +323,7 @@ and markdown export including private notes on request.
 | Rate limit | a fifth submission in a minute from one user is refused with an honest message |
 | Status loop | `PATCH` to `done` shows as Done on the tester's own list |
 
-## 15. Risks
+## 18. Risks
 
 | Risk | Consequence | Mitigation |
 | --- | --- | --- |
@@ -280,7 +333,7 @@ and markdown export including private notes on request.
 | Personal data lands in feedback | Tenant data in a model call, or in a queue | Context-light calls, a PII flag, guidance in the panel, retention |
 | The agency sees what its landlord said | A promise broken in code | Operator-only routes, tested; organisation-scoped everything else |
 
-## 16. Open questions
+## 19. Open questions
 
 1. Should a tester be able to **edit or withdraw** a submission? I would allow withdraw
    and not edit — an edited record loses the original words that made it useful.

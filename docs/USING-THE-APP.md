@@ -188,8 +188,10 @@ inventory report or notice, you do not have to use ours.
 1. Press **Upload our documents** — it opens **Back office → Our documents**.
 2. Choose the Word file and give it a name. Upload one document at a time.
 3. The app reads it and shows you each value it found next to a box: pick the detail
-   that belongs there (`agent.company_name`, `tenancy.rent_monthly`, and so on). Where
-   it guessed, the guess is already in the box — check the ones marked **choose**.
+   that belongs there (`agent.company_name`, `tenancy.rent_amount`, and so on). Where it
+   guessed, the guess is already in the box — check the ones marked **choose**. A
+   person's details are offered as *Full name (first tenant)*, *Email (first tenant)* and
+   so on, because a joint tenancy keeps each person's details in its own list.
 4. From then on the document appears on every tenancy's Documents tab with a
    **Fill for this tenant** button. The file it produces is your layout, your
    wording, your letterhead, with this tenant's details in place of the old ones.
@@ -272,6 +274,11 @@ You can see what you have sent, and its state — *Sent*, *Being looked at*, *On
 The person who owns the product reads it all in **Back office → Feedback**: a queue with
 statuses, duplicates counted (*asked 4 times*), anything containing personal data or a
 promise flagged for a careful read, and an export to Markdown.
+
+**Nothing is ever deleted from that queue.** Marking something *Done* or *Not doing it* is
+a status, not a removal: the record stays, with who sent it, what they said, and the
+outcome. A person who sent it keeps seeing it in their own list, with the outcome and any
+note. Five submissions a person per hour, to stop an accident becoming a flood.
 
 ## A normal week
 

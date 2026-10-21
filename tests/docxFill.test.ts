@@ -3,7 +3,7 @@ import { describe, it } from 'node:test';
 
 import { Document, Packer, Paragraph, TextRun } from 'docx';
 
-import { buildReplacements, extractDocxText, fillDocx, formatLike, replaceInDocumentXml, type SlotLink } from '../src/docs/docxFill.ts';
+import { buildReplacements, extractDocxText, fillDocx, formatLike, replaceInDocumentXml, resolveFieldPath, type SlotLink } from '../src/docs/docxFill.ts';
 import { createZip, readZip } from '../src/util/zip.ts';
 
 async function sampleDocx(): Promise<Buffer> {
@@ -31,6 +31,36 @@ async function sampleDocx(): Promise<Buffer> {
   });
   return Packer.toBuffer(document);
 }
+
+describe('resolving a detail by its path', () => {
+  const fields = {
+    'tenancy.rent_amount': 1250,
+    tenants: [
+      { full_name: 'Alex Morgan', email: 'alex@example.test' },
+      { full_name: 'Sam Okafor', email: 'sam@example.test' },
+    ],
+  };
+
+  it('reads a flat detail', () => {
+    assert.equal(resolveFieldPath(fields, 'tenancy.rent_amount'), 1250);
+  });
+
+  it('reads one tenant by index', () => {
+    assert.equal(resolveFieldPath(fields, 'tenants[0].full_name'), 'Alex Morgan');
+    assert.equal(resolveFieldPath(fields, 'tenants[1].full_name'), 'Sam Okafor');
+    assert.equal(resolveFieldPath(fields, 'tenants[7].full_name'), undefined);
+  });
+
+  it('accepts the unindexed form as the first tenant, which is what somebody typing by hand means', () => {
+    assert.equal(resolveFieldPath(fields, 'tenants.full_name'), 'Alex Morgan');
+    assert.equal(resolveFieldPath(fields, 'tenants.nonsense'), undefined);
+  });
+
+  it('does not invent a value when there are no tenants', () => {
+    assert.equal(resolveFieldPath({}, 'tenants.full_name'), undefined);
+    assert.equal(resolveFieldPath({ tenants: 'not an array' }, 'tenants.full_name'), undefined);
+  });
+});
 
 describe('zip round trip', () => {
   it('reads back what it wrote', () => {

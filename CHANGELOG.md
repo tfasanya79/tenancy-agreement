@@ -19,6 +19,37 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Fixed — a tenant's name could not be mapped in your own document
+
+Found by testing the upload-and-fill route end to end, which had no route-level test
+before. The rent filled correctly and the tenant did not: the mapping picker offered only
+flat field keys, and a person's details live in the `tenants` array, so `full_name` alone
+resolved to nothing. The picker now offers **Full name (first tenant)**, **Email (first
+tenant)**, and the second tenant likewise; `resolveFieldPath` also accepts the unindexed
+`tenants.full_name` as meaning the first tenant, for anybody mapping by hand.
+
+### Added — tests for the features that had none, and the retention promise
+
+`tests/features.test.ts` covers what was reachable but unproven: uploading an agency's own
+`.docx`, mapping it by hand, filling it for a tenant and checking the produced file (their
+letterhead kept, the rent and the name substituted), rejecting a file that is not Word,
+and deleting an upload; the calendar as `.ics`, whole and per tenancy; the printable
+history, including a hostile tenant name that must not become markup.
+
+It also pins the two promises the queue makes:
+
+- **Nothing deletes feedback.** There is no delete route, and a test fails if one appears.
+  Marking a record `done` or `declined` is a status: it stays in the queue and in the
+  sender's own list, with its date, conversation and outcome, for as long as the database
+  exists.
+- **A declined ask does not gather support for a new one** — clustering skips it, so a
+  refused idea cannot look popular by duplication.
+
+`docs/FEEDBACK.md` now records where feedback is stored and why it has to move: it sits in
+the tenancy database today (so it is in every hourly backup), and it belongs in the control
+database once each organisation has its own file — otherwise a landlord's words about their
+agency travel with that agency's data. Also documented: five submissions a person per hour,
+in memory, cleared by a restart.
 ### Added — the FEEDBACK button, and the queue behind it
 
 A button in the corner of every screen, for everyone with an account. Type what you want

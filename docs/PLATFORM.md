@@ -99,6 +99,9 @@ organisations   id, name, legal_name, company_number, vat_number, address, phone
 users           id, email (unique), name, password_hash, created_at, disabled_at
 memberships     id, organisation_id, user_id, role, landlord_id, created_at, disabled_at
 sessions        as today, but a session names the organisation it was opened for
+feedback        the FEEDBACK records — deliberately here and not in an agency's file,
+                because a landlord's words about their agency must not travel with it
+                (see docs/FEEDBACK.md §6)
 ```
 
 - **Identity is global, authorisation is per organisation.** One person may work for

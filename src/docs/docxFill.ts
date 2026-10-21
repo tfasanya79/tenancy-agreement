@@ -394,6 +394,19 @@ export function resolveFieldPath(fields: Record<string, unknown>, path: string):
     const person = list[index];
     return typeof person === 'object' && person !== null ? (person as Record<string, unknown>)[key] : undefined;
   }
+
+  // `tenants.full_name` means the first tenant: somebody mapping a document by hand
+  // should not have to know that a person's details live in an array.
+  const unindexed = /^tenants\.(\w+)$/.exec(path.trim());
+  if (unindexed !== null) {
+    const list = fields['tenants'];
+    if (!Array.isArray(list)) return undefined;
+    const first = list[0];
+    return typeof first === 'object' && first !== null
+      ? (first as Record<string, unknown>)[unindexed[1] ?? '']
+      : undefined;
+  }
+
   return fields[path];
 }
 

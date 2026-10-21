@@ -3316,17 +3316,39 @@ function fieldPicker(value, onChange) {
     if (!groups.has(field.group)) groups.set(field.group, []);
     groups.get(field.group).push(field);
   }
+
+  /**
+   * A person's details are not a flat key: they live in the `tenants` array, at
+   * `tenants[0].full_name`. Offering only flat keys meant the one value every
+   * agreement needs — the tenant's name — could not be mapped at all, so the first two
+   * tenants are offered here, expanded.
+   */
+  const optionsFor = (field) => {
+    if (field.type !== 'people') {
+      return [el('option', { value: field.key, selected: value === field.key }, field.label)];
+    }
+    const children = Array.isArray(field.children) ? field.children : [];
+    return [0, 1].flatMap((index) =>
+      children.map((child) =>
+        el(
+          'option',
+          {
+            value: `${field.key}[${index}].${child.key}`,
+            selected: value === `${field.key}[${index}].${child.key}`,
+          },
+          `${child.label}${index === 0 ? ' (first tenant)' : ` (tenant ${index + 1})`}`,
+        ),
+      ),
+    );
+  };
+
   const selects = el(
     'select',
     { class: 'field-map' },
     el('option', { value: '' }, '— not used —'),
     ...[...groups.entries()].map(([groupId, fields]) => {
       const label = state.groups.find((group) => group.id === groupId)?.title ?? groupId;
-      return el(
-        'optgroup',
-        { label },
-        ...fields.map((field) => el('option', { value: field.key, selected: value === field.key }, field.label)),
-      );
+      return el('optgroup', { label }, ...fields.flatMap(optionsFor));
     }),
   );
   selects.addEventListener('change', () => onChange(selects.value));

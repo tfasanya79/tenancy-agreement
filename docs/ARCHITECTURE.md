@@ -19,7 +19,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 322 tests on `node:test` |
+| Tests | `tests/` | 343 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -241,6 +241,13 @@ with tens of packs does not need.
 **Why is the session token not stored?** `sessions.id` is the SHA-256 of the token in
 the cookie. A copy of the database therefore cannot be turned into a signed-in
 browser: the rows recognise a token, they do not contain one.
+
+**Where does feedback live, and is that right?** In the same file as the tenancies, in
+`feedback` and `feedback_messages`. That was a deliberate first step and not a good final
+one: when one database per organisation arrives ([docs/PLATFORM.md](PLATFORM.md)),
+feedback moves to the control database, because it is the product's record and must not
+travel with an agency's export. Until then, the only routes that read it are the
+operator's, and the backups contain both — which they already did.
 
 **Why an `events` table rather than columns on `packs`?** "Who changed the rent" is
 a question with many answers over time, and one column holds one. The events table
