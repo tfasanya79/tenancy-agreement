@@ -265,6 +265,17 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     root: resolve(config.publicDir),
     prefix: '/',
     index: 'index.html',
+    /**
+     * The interface is served from disk with no build step, so a deploy is only live
+     * once the browser has the new files. Asking it to revalidate every time costs a
+     * 304 per asset and removes a whole class of "the button is not there" — which is
+     * exactly how a shipped feature once looked like a missing one.
+     */
+    setHeaders: (response, path) => {
+      if (/\.(?:html|js|css)$/i.test(path)) {
+        response.header('Cache-Control', 'no-cache, must-revalidate');
+      }
+    },
   });
 
   app.setErrorHandler((error: FastifyError, _request: FastifyRequest, reply: FastifyReply) => {

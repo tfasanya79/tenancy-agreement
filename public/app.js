@@ -124,6 +124,12 @@ async function boot() {
     if (status.needsSetup === true) return renderSetupScreen();
     if (status.signedIn !== true) return renderSignInScreen();
     state.me = status.user;
+    // An interface served from cache can be older than the server that answers it. If
+    // the person's shape is not the one this build knows, ask again rather than
+    // quietly hiding whatever the missing field gates.
+    if (state.me !== null && state.me.isOperator === undefined) {
+      state.me = await api('/api/auth/me');
+    }
     await loadWorkspace();
   } catch (error) {
     $('#main').replaceChildren(
@@ -212,7 +218,44 @@ function renderIdentity() {
   // The interface offers only what the server would allow.
   newPack.hidden = isLandlord();
   backOffice.hidden = isLandlord();
+
+  // An operator gets a direct way in, with a count: hunting through a row of tabs is
+  // how a feature gets reported as missing.
+  const feedbackButton = $('#open-feedback');
+  if (feedbackButton !== null) {
+    feedbackButton.hidden = state.me.isOperator !== true;
+    feedbackButton.onclick = () => openFeedbackQueue();
+    if (state.me.isOperator === true) {
+      void api('/api/feedback/summary')
+        .then((summary) => {
+          const waiting = Number(summary?.counts?.new ?? 0) + Number(summary?.counts?.triaged ?? 0);
+          feedbackButton.textContent = waiting > 0 ? `Feedback · ${waiting}` : 'Feedback';
+          feedbackButton.title =
+            waiting > 0
+              ? `${waiting} waiting for you — new or being looked at`
+              : 'Everything filed has been triaged';
+        })
+        .catch(() => {
+          feedbackButton.textContent = 'Feedback';
+        });
+    }
+  }
+
   renderFeedbackPill();
+}
+
+/** Straight to the queue, for the person who owns the product. */
+async function openFeedbackQueue() {
+  state.view = 'backoffice';
+  state.boTab = 'feedback';
+  if (state.backOffice === null || state.backOffice === undefined) {
+    try {
+      await loadBackOffice();
+    } catch (error) {
+      toast(error.message, true);
+    }
+  }
+  renderMain();
 }
 
 /* ------------------------------------------------------------------- gate --- */
