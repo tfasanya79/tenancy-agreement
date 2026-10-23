@@ -404,6 +404,175 @@ describe('feedback is kept until it is marked done, and then removed', () => {
     assert.deepEqual(forOwner.json().counts, {}, 'an agency owner gets no counts');
   });
 });
+describe('identity cannot disagree with itself', () => {
+  it('never lets a browser keep an API response', async () => {
+    for (const url of ['/api/auth/status', '/api/overview', '/api/packs']) {
+      const response = await app.inject({ method: 'GET', url, headers: { cookie } });
+      assert.equal(String(response.headers['cache-control'] ?? '').includes('no-store'), true, url);
+    }
+    // The interface itself is served with a revalidate, not no-store.
+    const staticFile = await app.inject({ method: 'GET', url: '/app.js' });
+    assert.equal(String(staticFile.headers['cache-control'] ?? '').includes('no-store'), false);
+  });
+
+  it('fills a gap in the operator flag rather than leaving the queue unread', async () => {
+    const dir = tempDir('td-feat-bootstrap-');
+    const ownStore = new Store(dir);
+    try {
+      const auth = new AuthStore(ownStore.handle, []);
+      await auth.createUser({ email: 'first@example.test', name: 'First', role: 'agent', password: 'a long enough phrase' });
+      // The first owner made takes the flag; the second is the tie-breaker case, created
+      // in the same millisecond, so the ordering has to be stable rather than lucky.
+      const firstOwner = await auth.createUser({
+        email: 'first-owner@example.test',
+        name: 'First Owner',
+        role: 'owner',
+        password: 'a long enough phrase',
+      });
+      const secondOwner = await auth.createUser({
+        email: 'second-owner@example.test',
+        name: 'Second Owner',
+        role: 'owner',
+        password: 'a long enough phrase',
+      });
+      assert.equal(auth.operatorEmails().length, 0);
+
+      const promoted = auth.ensureOperator();
+      assert.notEqual(promoted, null, 'somebody must be able to read the queue');
+      assert.equal(promoted, firstOwner.email, 'the oldest working owner takes it');
+      assert.equal(auth.getUser(secondOwner.id)?.isOperator, false);
+
+      // It does nothing when somebody already has it.
+      assert.equal(auth.ensureOperator(), null);
+    } finally {
+      ownStore.close();
+    }
+  });
+});
+
+describe('the overview', () => {
+  it('answers with the state of things, for staff', async () => {
+    const response = await as(cookie, { method: 'GET', url: '/api/overview' });
+    assert.equal(response.statusCode, 200, response.body);
+    const body = response.json();
+    for (const key of ['tenancies', 'records', 'people', 'deadlines', 'care', 'activity']) {
+      assert.ok(key in body, `the overview should report ${key}`);
+    }
+    assert.equal(typeof body.tenancies.total, 'number');
+    assert.equal(Array.isArray(body.activity), true);
+    assert.equal(body.you.email, OWNER.email);
+  });
+
+  it('tells the operator who else reads the queue, and hides the feedback block from others', async () => {
+    const operator = await as(operatorCookie, { method: 'GET', url: '/api/overview' });
+    assert.ok(operator.json().feedback !== null, 'the operator sees the queue count');
+    assert.equal(Array.isArray(operator.json().people.operators), true);
+
+    const owner = await as(cookie, { method: 'GET', url: '/api/overview' });
+    assert.equal(owner.json().feedback, null, 'the feedback block is the operator’s alone');
+  });
+
+  it('is scoped for a landlord', async () => {
+    const landlord = await as(cookie, {
+      method: 'POST',
+      url: '/api/backoffice/landlords',
+      payload: { name: 'Scoped Landlord', address: '1 Scope Street', email: 'scope@landlord.test', phone: '07700 900555' },
+    });
+    const landlordId = landlord.json().id;
+    await as(cookie, {
+      method: 'POST',
+      url: '/api/users',
+      payload: {
+        name: 'Scoped Landlord',
+        email: 'scoped@landlord.test',
+        role: 'landlord',
+        password: 'a long enough phrase',
+        landlordId,
+      },
+    });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'scoped@landlord.test', password: 'a long enough phrase' },
+    });
+    const scopedCookie = String(login.headers['set-cookie'] ?? '').split(';')[0] ?? '';
+
+    const response = await as(scopedCookie, { method: 'GET', url: '/api/overview' });
+    assert.equal(response.statusCode, 200, response.body);
+    const body = response.json();
+    assert.equal(body.tenancies.total, 0, 'a landlord sees only their own tenancies');
+    assert.equal(body.records.landlords, 1, 'and only their own landlord record');
+    assert.equal(body.feedback, null);
+    assert.equal(body.people.total >= 1, true, 'the account count is not a secret');
+  });
+});
+
+describe('granting the flag, and removing an account', () => {
+  it('lets the operator share the flag, and it sticks', async () => {
+    const granted = await as(operatorCookie, {
+      method: 'POST',
+      url: `/api/users/${(await as(cookie, { method: 'GET', url: '/api/auth/me' })).json().id}/operator`,
+      payload: { isOperator: true },
+    });
+    assert.equal(granted.statusCode, 200, granted.body);
+    assert.equal(granted.json().user.isOperator, true);
+
+    // The new operator can read the queue.
+    const queue = await as(cookie, { method: 'GET', url: '/api/feedback/queue' });
+    assert.equal(queue.statusCode, 200);
+
+    // Put it back, so the rest of the file tests what it says it tests.
+    await as(operatorCookie, {
+      method: 'POST',
+      url: `/api/users/${(await as(cookie, { method: 'GET', url: '/api/auth/me' })).json().id}/operator`,
+      payload: { isOperator: false },
+    });
+    assert.equal((await as(cookie, { method: 'GET', url: '/api/feedback/queue' })).statusCode, 403);
+  });
+
+  it('refuses a non-operator trying to grant it to themselves', async () => {
+    const me = await as(cookie, { method: 'GET', url: '/api/auth/me' });
+    const attempt = await as(cookie, {
+      method: 'POST',
+      url: `/api/users/${me.json().id}/operator`,
+      payload: { isOperator: true },
+    });
+    assert.equal(attempt.statusCode, 403);
+  });
+
+  it('will not leave the queue with nobody reading it', async () => {
+    const me = await as(operatorCookie, { method: 'GET', url: '/api/auth/me' });
+    const attempt = await as(operatorCookie, {
+      method: 'POST',
+      url: `/api/users/${me.json().id}/operator`,
+      payload: { isOperator: false },
+    });
+    assert.equal(attempt.statusCode, 400);
+    assert.match(attempt.json().error, /has to read the feedback queue|another account/i);
+  });
+
+  it('deletes an account, but never your own or the last owner', async () => {
+    const me = await as(cookie, { method: 'GET', url: '/api/auth/me' });
+    const self = await as(cookie, { method: 'DELETE', url: `/api/users/${me.json().id}` });
+    assert.equal(self.statusCode, 400);
+
+    const created = await as(cookie, {
+      method: 'POST',
+      url: '/api/users',
+      payload: { name: 'Temp Person', email: 'temp@example.test', role: 'agent', password: 'a long enough phrase' },
+    });
+    assert.equal(created.statusCode, 201);
+    const id = created.json().user.id;
+    const removed = await as(cookie, { method: 'DELETE', url: `/api/users/${id}` });
+    assert.equal(removed.statusCode, 200, removed.body);
+
+    const list = await as(cookie, { method: 'GET', url: '/api/users' });
+    assert.equal(
+      list.json().users.some((user: { id: string }) => user.id === id),
+      false,
+    );
+  });
+});
 describe('the operator flag can be taken away', () => {
   it('is applied from the environment, and removed when it stops being listed', async () => {
     const dir = tempDir('td-feat-op-');

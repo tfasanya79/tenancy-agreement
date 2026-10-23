@@ -233,6 +233,46 @@ export class AuthStore {
     }
   }
 
+  /** Everyone who may read the feedback queue, as the environment left it. */
+  operatorEmails(): string[] {
+    // `rowid` breaks the tie: two accounts made in the same millisecond must still have
+    // a stable order, or "the oldest owner" would be whichever row came back first.
+    const rows = this.#db
+      .prepare('SELECT email FROM users WHERE is_operator = 1 AND disabled_at IS NULL ORDER BY created_at ASC, rowid ASC')
+      .all() as unknown as Array<{ email: string }>;
+    return rows.map((row) => row.email);
+  }
+
+  /**
+   * Guarantee that somebody can read the queue.
+   *
+   * An installation where the environment names nobody — a typo, a fresh copy, a
+   * renamed account — would otherwise have a queue nobody can open, which is a support
+   * ticket rather than a permission. The oldest working owner takes the flag, and the
+   * caller records that it happened.
+   */
+  ensureOperator(): string | null {
+    if (this.operatorEmails().length > 0) return null;
+    const row = this.#db
+      .prepare(
+        "SELECT id, email FROM users WHERE role = 'owner' AND disabled_at IS NULL ORDER BY created_at ASC, rowid ASC LIMIT 1",
+      )
+      .get() as unknown as { id: string; email: string } | undefined;
+    if (row === undefined) return null;
+    this.#db.prepare('UPDATE users SET is_operator = 1 WHERE id = ?').run(row.id);
+    return row.email;
+  }
+
+  /** Set or clear the flag directly, for the grant in People & access. */
+  setOperator(userId: string, isOperator: boolean): void {
+    this.#db.prepare('UPDATE users SET is_operator = ? WHERE id = ?').run(isOperator ? 1 : 0, userId);
+  }
+
+  /** Remove an account. Its sessions go with it; the audit trail keeps the name. */
+  deleteUser(userId: string): void {
+    this.#db.prepare('DELETE FROM users WHERE id = ?').run(userId);
+  }
+
   // --- people -------------------------------------------------------------
 
   /** True while nobody can sign in: the first-run screen is the only way in. */

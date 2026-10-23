@@ -358,4 +358,67 @@ export function registerAuthRoutes(app: FastifyInstance, deps: AuthRouteDeps): v
     });
     return { ok: true };
   });
+
+  /**
+   * Grant or take away the product-owner flag.
+   *
+   * Only an operator may do it — the flag decides who reads feedback addressed to the
+   * platform — and the last one cannot give it up, or the queue would have no reader.
+   */
+  app.post('/api/users/:id/operator', async (request, reply) => {
+    const acting = requireUser(request);
+    if (!acting.isOperator) {
+      return reply.code(403).send({ error: 'Only the product owner can share this flag.' });
+    }
+
+    const id = (request.params as { id: string }).id;
+    const target = auth.getUser(id);
+    if (target === null) return reply.code(404).send({ error: 'That person is not on the list.' });
+
+    const body = (request.body ?? {}) as Body;
+    const wanted = body['isOperator'] === true;
+
+    if (!wanted) {
+      const operators = auth.listUsers().filter((user) => user.isOperator && user.disabledAt === null);
+      if (operators.length <= 1) {
+        return reply
+          .code(400)
+          .send({ error: 'Somebody has to read the feedback queue. Give the flag to another account first.' });
+      }
+    }
+
+    auth.setOperator(id, wanted);
+    auth.record({ actor: acting, kind: wanted ? 'operator.granted' : 'operator.revoked', detail: target.email });
+    const updated = auth.getUser(id);
+    return { user: updated === null ? null : { ...publicUser(updated, backOffice), disabled: updated.disabledAt !== null } };
+  });
+
+  /** Remove an account entirely. Not yourself, and not the last owner. */
+  app.delete('/api/users/:id', async (request, reply) => {
+    const acting = requireUser(request);
+    const id = (request.params as { id: string }).id;
+    const target = auth.getUser(id);
+    if (target === null) return reply.code(404).send({ error: 'That person is not on the list.' });
+    if (target.id === acting.id) return reply.code(400).send({ error: 'You cannot delete your own account.' });
+
+    if (target.role === 'owner') {
+      const owners = auth.listUsers().filter(
+        (user) => user.role === 'owner' && user.disabledAt === null && user.id !== target.id,
+      );
+      if (owners.length === 0) return reply.code(400).send({ error: 'There has to be one owner account.' });
+    }
+
+    if (target.isOperator) {
+      const operators = auth.listUsers().filter(
+        (user) => user.isOperator && user.disabledAt === null && user.id !== target.id,
+      );
+      if (operators.length === 0) {
+        return reply.code(400).send({ error: 'Give the product-owner flag to another account before deleting this one.' });
+      }
+    }
+
+    auth.deleteUser(id);
+    auth.record({ actor: acting, kind: 'user.deleted', detail: `${target.email} (${target.role})` });
+    return { ok: true };
+  });
 }

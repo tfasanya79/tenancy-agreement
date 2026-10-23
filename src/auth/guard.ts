@@ -95,6 +95,7 @@ const LANDLORD_READS: RegExp[] = [
   /^\/api\/due$/,
   /^\/api\/calendar\.ics$/,
   /^\/api\/feedback\/mine$/,
+  /^\/api\/overview$/,
 ];
 
 /**
@@ -211,6 +212,20 @@ export function registerAuthGuard(app: FastifyInstance, deps: GuardDeps): void {
     }
 
     if (OPERATOR_ONLY.some((rule) => matches(rule, request.method, path)) && !user.isOperator) {
+      const operators = deps.auth.operatorEmails();
+      // An agency owner who is not the product owner gets told who is, and what to do:
+      // a refusal that does not explain itself is how a working feature looks broken.
+      if (isOwner(user)) {
+        return reply.code(403).send({
+          error:
+            operators.length === 0
+              ? 'No account is marked as the product owner yet, so this list has nobody reading it.'
+              : `This list belongs to ${operators.join(' or ')}. You are signed in as ${user.email}.`,
+          operatorEmail: operators[0] ?? null,
+          youAre: user.email,
+          hint: 'Mark the account in Back office → People & access, or add the address to OPERATOR_EMAILS and restart.',
+        });
+      }
       return reply.code(403).send({ error: 'That is the product owner’s list, not part of your account.' });
     }
 

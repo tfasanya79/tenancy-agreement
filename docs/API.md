@@ -147,9 +147,16 @@ error.
 | `GET` | `/api/users` | People, roles and the landlord records they may be tied to (owner only) |
 | `POST` | `/api/users` | `{ name, email, role, password, landlordId? }` (owner only) |
 | `PATCH` | `/api/users/:id` | `{ name?, role?, landlordId? }` (owner only) |
+| `POST` | `/api/users/:id/operator` | `{ isOperator }` — grant or take away the product-owner flag (operator only; the last operator cannot give it up) |
+| `DELETE` | `/api/users/:id` | Remove an account and its sessions (owner only; never yourself, never the last owner, never the last operator) |
 | `POST` | `/api/users/:id/password` | Sets somebody's password and signs them out everywhere (owner only) |
 | `POST` | `/api/users/:id/disabled` | `{ disabled }` — switch an account off or on (owner only) |
 | `GET` | `/api/access/log` | The agency-wide trail of who did what (owner only) |
+| `GET` | `/api/overview` | The state of the installation for the back office: tenancies, records, people, deadlines, care, activity, and the feedback count for an operator. Scoped for a landlord |
+
+Every response under `/api/` carries `Cache-Control: no-store`. Identity and data change,
+and a page holding a stale copy of "who am I" draws buttons for somebody who is no longer
+signed in — which is how a working feature was once reported as missing.
 
 A write from a browser sends its `Origin`; if that does not match the host the
 request is refused with `403`. Requests with no `Origin` at all — `curl`, a script —

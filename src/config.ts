@@ -25,6 +25,8 @@ export type AppConfig = {
   offlineMode: boolean;
   /** Emails that own the product and may read the feedback queue. */
   operatorEmails: string[];
+  /** Where the nightly/hourly backups are written, so the overview can date them. */
+  backupDir: string;
 };
 
 function env(name: string, fallback = ''): string {
@@ -68,6 +70,7 @@ export function loadConfig(overrides: Partial<AppConfig> = {}): AppConfig {
       .split(',')
       .map((email) => email.trim())
       .filter((email) => email !== ''),
+    backupDir: env('BACKUP_DIR', './backups'),
     ...overrides,
   };
   return config;

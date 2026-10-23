@@ -61,6 +61,31 @@ is applied once, in `src/auth/guard.ts`, to every route: a pack that is not thei
 answers **"not found"** rather than "not allowed", so the reply reveals nothing
 about what exists.
 
+
+## The product owner is not the agency owner
+
+Two different things, and confusing them is how a working feature once looked broken:
+
+| | Agency owner | Product owner |
+| --- | --- | --- |
+| What it means | Runs the letting agency. Everything about the tenancies, the records and the people | Owns the *installation*. Reads the feedback queue, and nothing else that the agency owner cannot |
+| How it is set | The `owner` role | A flag on the account, `is_operator` |
+| Why separate | — | Feedback is addressed to the platform. An agency owner must not be able to read what their own landlord said about them |
+
+An account can be both — in a single-agency installation it usually is — but the roles are
+distinct, and the interface says so. **Back office → People & access** marks the product
+owner with a badge, and the product owner can hand the flag to another account with
+**Make product owner**. The last one cannot give it up: a queue nobody can open is a
+support ticket, not a permission.
+
+`OPERATOR_EMAILS` (in `/etc/tenancydesk.env`) seeds the flag at startup, so a fresh
+installation needs no SQL by hand. If it names nobody — a typo, a renamed account, a copied
+database — the **oldest working owner** takes the flag at startup and the audit trail
+records that it happened, rather than leaving the queue unreadable.
+
+If you are told *"this list belongs to somebody@example.com"* and it should be you, the
+account you are signed in as is not the one on the flag. Either sign in as that account and
+grant it to yourself in People & access, or change `OPERATOR_EMAILS` and restart.
 ## Sessions
 
 - A session lasts **twelve hours**, sliding with use, and never more than **seven

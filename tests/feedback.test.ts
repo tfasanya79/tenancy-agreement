@@ -205,10 +205,24 @@ describe('filing', () => {
 });
 
 describe('the queue is the operator’s, and nobody else’s', () => {
-  it('refuses the agency owner — a landlord’s words are not theirs', async () => {
+  it('refuses the agency owner — and tells them who reads it', async () => {
     const response = await as(ownerCookie, { method: 'GET', url: '/api/feedback/queue' });
     assert.equal(response.statusCode, 403);
-    assert.match(response.json().error, /product owner/i);
+    const body = response.json();
+    assert.match(body.error, /belongs to/i);
+    assert.equal(body.operatorEmail, OPERATOR.email, 'an owner is told which account reads the queue');
+    assert.equal(body.youAre, OWNER.email);
+    assert.match(body.hint, /People & access|OPERATOR_EMAILS/);
+  });
+
+  it('does not tell an agent or a landlord who the product owner is', async () => {
+    const agent = await as(agentCookie, { method: 'GET', url: '/api/feedback/queue' });
+    assert.equal(agent.statusCode, 403);
+    assert.equal(agent.json().operatorEmail, undefined);
+
+    const landlord = await as(landlordCookie, { method: 'GET', url: '/api/feedback/queue' });
+    assert.equal(landlord.statusCode, 403);
+    assert.equal(landlord.json().operatorEmail, undefined);
   });
 
   it('refuses an agent', async () => {

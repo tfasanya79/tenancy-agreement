@@ -953,3 +953,54 @@ body.is-gate .main { display: grid; place-items: center; min-height: 70vh; }
   background: var(--paper);
   color: var(--ink);
 }
+/* --- the overview ---------------------------------------------------------- */
+
+.ov-quick { display: flex; gap: .4rem; flex-wrap: wrap; margin-bottom: .9rem; }
+.ov-grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(20rem, 1fr));
+  gap: .9rem;
+  margin-bottom: .9rem;
+}
+.ov-card { display: grid; gap: .55rem; align-content: start; }
+.ov-card-head { display: flex; justify-content: space-between; align-items: baseline; gap: .6rem; }
+.ov-card-head h3 { margin: 0; }
+.ov-figures {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(6.5rem, 1fr));
+  gap: .5rem;
+}
+.ov-figure {
+  display: grid;
+  gap: .1rem;
+  background: var(--sand);
+  border-radius: var(--radius-sm);
+  padding: .45rem .55rem;
+}
+.ov-figure strong { font-size: 1.15rem; line-height: 1.1; color: var(--ink); }
+.ov-figure span { font-size: .72rem; color: var(--muted); }
+.ov-flag {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .6rem;
+  flex-wrap: wrap;
+  background: #fdf3e0;
+  border-radius: var(--radius-sm);
+  padding: .4rem .55rem;
+  font-size: .82rem;
+  color: #8a5a12;
+}
+.ov-activity { display: grid; gap: .25rem; }
+.ov-activity-row {
+  display: grid;
+  grid-template-columns: 11rem minmax(0, 1fr);
+  gap: .6rem;
+  font-size: .82rem;
+  padding: .2rem 0;
+  border-bottom: 1px solid var(--line);
+}
+.ov-activity-row:last-child { border-bottom: 0; }
+@media (max-width: 640px) {
+  .ov-activity-row { grid-template-columns: 1fr; gap: .1rem; }
+}

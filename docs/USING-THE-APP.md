@@ -233,58 +233,24 @@ scheme by 19 November"*. You can add and delete your own.
 
 ## The back office
 
-The **Back office** button at the top right holds everything that is not one
-tenancy. It is where a detail is written once instead of on every pack.
+**Back office** is not a settings page — it opens on an **Overview** of the installation,
+because that is what you want when you press it:
 
-| Tab | What it is for |
-| --- | --- |
-| **Our details** | Your company name, address, email, phone, client money protection scheme and redress scheme. These fill every document. Also the review mode: *relaxed* asks before generating, *strict* holds the documents until you fix the issue. |
-| **Properties & rooms** | Each property, and each room in it. Fill the address once here and a new pack for that property inherits it. |
-| **Landlords & tenants** | The landlord's name and address, and the tenants you have dealt with before. |
-| **Our documents** | Upload your own Word templates — see [Your own documents](#your-own-documents). |
-| **People & access** | Add an agent or a landlord, set a password, switch an account off, and read who did what across the agency — see [Multi-user](MULTI-USER.md). |
-| **Health & backup** | **Download a backup** — one zip with the database, every document and every upload — plus what is on disk and what the app can see. Owner only: it contains every tenant's data. |
-| **Tidy up** | Pull the details you have already typed into packs into the records above, so the next tenancy is quicker. It shows you what it would do before it does anything. |
+- **Tenancies** — how many, how many are active or starting soon, how many documents have
+  been produced, and two things worth acting on: tenancies with no documents yet, and
+  tenancies not linked to a property (which therefore inherit nothing).
+- **Deadlines** — how many are past their date and how many fall due in the next 30 days.
+- **Records** — landlords, properties, rooms, tenants, and how many of your own documents
+  you have uploaded.
+- **People** — accounts by role, and which account reads the feedback queue.
+- **The installation** — database size, free disk, and when the last backup was taken.
+- **Feedback** — how many reports are waiting, if you are the product owner.
+- **Recent activity** — the last few things that happened, and who did them.
 
-Nothing in the back office is required. A tenancy works with the details typed on
-its own pack; the records just mean you stop typing them twice.
-
-## Saying what should change
-
-There is a **Feedback** button in the bottom-right corner of every screen, for everybody
-with an account — including landlords, who are otherwise read-only.
-
-Press it and say what you want in your own words: a wish, a frustration, a thing that
-took longer than it should. If the assistant is on, it will say back what it understood
-and offer you a one-line record — *"I will file this as a new feature: Filter the document
-list"* — which you can accept or correct before anything is sent. There is no sign-up, no
-ticket number, and no form to fill in unless the assistant is switched off, in which case
-the same box takes a plain note.
-
-Two things are worth knowing:
-
-- **It goes to the team that builds TenancyDesk, not to your agency.** A landlord's
-  feedback is never shown to the agency it is about.
-- **Nothing is promised.** The assistant will not say when something will be done,
-  because it does not know.
-
-You can see what you have sent, and its state — *Sent*, *Being looked at*, *On the list*,
-*Done* — in the same panel, under "What you have sent".
-
-The person who owns the product reads it all in **Back office → Feedback**: a queue with
-statuses, duplicates counted (*asked 4 times*), anything containing personal data or a
-promise flagged for a careful read, and an export to Markdown.
-
-**Marking it done deletes it.** One press and a confirmation, and the record goes — the
-tester's words, the conversation and who sent them — from your list and from theirs. What
-is kept is a single anonymous count, so the next person to ask for the same thing shows as
-*handled 3 times before*; that count decides what to build next, and it holds nobody's
-words.
-
-*Not doing it* is different: that leaves the record in a **Set aside** section at the
-bottom, so the reason is not lost, and you can still mark it done later to clear it. Five
-submissions a person per hour, to stop an accident becoming a flood.
-
+Every number is a button to the screen that changes it. Underneath are the tabs, which are
+the filing cabinet: **Properties & rooms**, **Landlords & tenants**, **Our documents**,
+**People & access**, **Health & backup**, **Tidy up**, and **Agency settings** (the details
+that print on every document).
 ## A normal week
 
 **Monday — new tenancy agreed**

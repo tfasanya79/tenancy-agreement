@@ -21,7 +21,7 @@ const state = {
   tab: 'assistant',
   /** 'tenancy' shows one pack; 'backoffice' shows the agency's records. */
   view: 'tenancy',
-  boTab: 'settings',
+  boTab: 'overview',
   backOffice: null,
   /** Fields the user has actually typed, so inherited values are not frozen. */
   dirty: new Set(),
@@ -171,6 +171,43 @@ async function loadWorkspace() {
 }
 
 /* ---------------------------------------------------------------- identity --- */
+
+/**
+ * Check that the page still knows who it is talking for.
+ *
+ * A tab can sit open for days, and the cookie underneath it can change — somebody
+ * signs in as a different account in another tab — leaving the page drawing buttons
+ * for a person the server no longer recognises. It happened once: a queue button that
+ * led to a refusal, because the identity was two days old. Ask whenever the tab comes
+ * back into view.
+ */
+async function reconcileIdentity() {
+  if (state.me === null) return;
+  try {
+    const me = await api('/api/auth/me');
+    if (me === null) return;
+    const changed =
+      me.id !== state.me.id ||
+      me.isOperator !== state.me.isOperator ||
+      me.role !== state.me.role ||
+      me.email !== state.me.email;
+    if (!changed) return;
+    // A different account is signed in: its packs, its permissions, its screens.
+    state.me = me;
+    state.detail = null;
+    state.packs = [];
+    state.chat.clear();
+    await loadWorkspace();
+  } catch {
+    // A session that has gone is handled by api(), which shows the sign-in screen.
+  }
+}
+
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') void reconcileIdentity();
+});
+window.addEventListener('focus', () => void reconcileIdentity());
+
 
 const myRole = () => state.me?.role ?? 'agent';
 const isOwner = () => myRole() === 'owner';
@@ -2631,7 +2668,28 @@ function renderFeedbackQueue(main) {
     try {
       data = await api('/api/feedback/queue');
     } catch (error) {
-      body.replaceChildren(el('div', { class: 'notice notice-err' }, error.message));
+      // Not a dead end: say who reads this list, who you are, and what changes it.
+      body.replaceChildren(
+        el(
+          'div',
+          { class: 'notice notice-err' },
+          el('p', {}, error.message),
+          state.me?.isOperator !== true && isOwner()
+            ? el(
+                'p',
+                { class: 'small' },
+                'The queue belongs to the installation’s product owner, which is not the same as being the agency’s owner. Mark your account in Back office → People & access, or add your address to OPERATOR_EMAILS and restart.',
+              )
+            : null,
+          isOwner()
+            ? el(
+                'button',
+                { class: 'btn btn-sm', type: 'button', onClick: () => { state.view = 'tenancy'; renderMain(); } },
+                'Back to the app',
+              )
+            : null,
+        ),
+      );
       return;
     }
 
@@ -2854,7 +2912,8 @@ function askToContinue(asked, onContinue) {
 }
 
 const BO_TABS = [
-  ['settings', 'Our details', ['owner']],
+  ['overview', 'Overview', ['owner', 'agent']],
+  ['settings', 'Agency settings', ['owner']],
   ['properties', 'Properties & rooms', ['owner', 'agent']],
   ['people', 'Landlords & tenants', ['owner', 'agent']],
   ['documents', 'Our documents', ['owner', 'agent']],
@@ -2966,7 +3025,8 @@ function renderBackOffice(main) {
   }
 
   let body;
-  if (current === 'properties') body = renderPropertiesSection(data);
+  if (current === 'overview') body = renderOverviewSection();
+  else if (current === 'properties') body = renderPropertiesSection(data);
   else if (current === 'people') body = renderPeopleSection(data);
   else if (current === 'documents') body = renderOurDocumentsSection();
   else if (current === 'access') body = renderAccessSection();
@@ -3489,6 +3549,215 @@ function fieldPicker(value, onChange) {
   return selects;
 }
 
+/* ---------------------------------------------------------------- overview --- */
+
+/**
+ * The first thing the back office says: the state of things, and what to do about it.
+ *
+ * Every number here is a link to the screen that changes it. A dashboard that only
+ * reports is decoration.
+ */
+function renderOverviewSection() {
+  const box = el('div', { class: 'bo-grid' }, el('p', { class: 'small' }, 'Looking at where things stand…'));
+
+  const goTab = (tab) => {
+    state.view = 'backoffice';
+    state.boTab = tab;
+    renderMain();
+  };
+
+  void (async () => {
+    let data;
+    try {
+      data = await api('/api/overview');
+    } catch (error) {
+      box.replaceChildren(el('div', { class: 'notice notice-err' }, error.message));
+      return;
+    }
+
+    const bytes = (value) => {
+      if (typeof value !== 'number') return '—';
+      const units = ['bytes', 'KB', 'MB', 'GB', 'TB'];
+      let size = value;
+      let unit = 0;
+      while (size >= 1024 && unit < units.length - 1) {
+        size /= 1024;
+        unit += 1;
+      }
+      return `${size.toFixed(unit === 0 ? 0 : 1)} ${units[unit]}`;
+    };
+
+    const figure = (label, value) =>
+      el('div', { class: 'ov-figure' }, el('strong', {}, String(value)), el('span', {}, label));
+    const link = (label, onClick) => el('button', { class: 'btn btn-sm', type: 'button', onClick }, label);
+    const card = (title, children, action) =>
+      el(
+        'div',
+        { class: 'bo-section ov-card' },
+        el('div', { class: 'ov-card-head' }, el('h3', {}, title), action ?? null),
+        ...children,
+      );
+    const flag = (text, action) =>
+      el('div', { class: 'ov-flag' }, el('span', {}, text), action ?? null);
+
+    const lastBackup =
+      data.care.lastBackupAt === null
+        ? 'never — nothing has been backed up'
+        : new Date(data.care.lastBackupAt).toLocaleString('en-GB');
+
+    const activityRows = (data.activity ?? []).slice(0, 8).map((event) =>
+      el(
+        'div',
+        { class: 'ov-activity-row' },
+        el('span', { class: 'small' }, new Date(event.at).toLocaleString('en-GB')),
+        el(
+          'span',
+          {},
+          `${event.actor === '' ? 'System' : event.actor} — ${eventWords(event.kind)}${event.detail === '' ? '' : `: ${event.detail}`}`,
+        ),
+      ),
+    );
+
+    const quick = el(
+      'div',
+      { class: 'ov-quick' },
+      canWrite() ? el('button', { class: 'btn btn-primary btn-sm', type: 'button', onClick: () => void createPack() }, 'New tenant pack') : null,
+      canWrite() ? el('button', { class: 'btn btn-sm', type: 'button', onClick: () => goTab('properties') }, 'Add a property') : null,
+      canWrite() ? el('button', { class: 'btn btn-sm', type: 'button', onClick: () => void openOurDocuments() }, 'Upload our documents') : null,
+      isOwner() ? el('a', { class: 'btn btn-sm', href: '/api/backup' }, 'Download a backup') : null,
+    );
+
+    box.replaceChildren(
+      quick,
+      el(
+        'div',
+        { class: 'ov-grid' },
+        card(
+          'Tenancies',
+          [
+            el(
+              'div',
+              { class: 'ov-figures' },
+              figure('in total', data.tenancies.total),
+              figure('active', data.tenancies.lifecycle.active ?? 0),
+              figure('starting soon', data.tenancies.lifecycle.upcoming ?? 0),
+              figure('documents', data.tenancies.documents),
+            ),
+            data.tenancies.withoutDocuments > 0
+              ? flag(
+                  `${data.tenancies.withoutDocuments} tenancy${data.tenancies.withoutDocuments === 1 ? ' has' : 'ies have'} no documents yet`,
+                )
+              : null,
+            data.tenancies.withoutProperty > 0
+              ? flag(
+                  `${data.tenancies.withoutProperty} tenancy${data.tenancies.withoutProperty === 1 ? ' is' : 'ies are'} not linked to a property, so ${data.tenancies.withoutProperty === 1 ? 'it inherits' : 'they inherit'} nothing`,
+                  canWrite() ? link('Tidy up', () => goTab('tidy')) : null,
+                )
+              : null,
+          ],
+          link('All tenancies', () => { state.view = 'tenancy'; renderMain(); }),
+        ),
+        card(
+          'Deadlines',
+          [
+            el(
+              'div',
+              { class: 'ov-figures' },
+              figure('past their date', data.deadlines.overdue),
+              figure('due in 30 days', data.deadlines.soon),
+              figure('tracked', data.deadlines.total),
+            ),
+            data.deadlines.overdue > 0
+              ? flag(`${data.deadlines.overdue} item${data.deadlines.overdue === 1 ? ' is' : 's are'} past their date`)
+              : el('p', { class: 'small' }, 'Nothing past its date.'),
+          ],
+          link('What’s due', () => { state.view = 'due'; renderMain(); }),
+        ),
+      ),
+      el(
+        'div',
+        { class: 'ov-grid' },
+        card(
+          'Records',
+          [
+            el(
+              'div',
+              { class: 'ov-figures' },
+              figure('landlords', data.records.landlords),
+              figure('properties', data.records.properties),
+              figure('rooms', data.records.rooms),
+              figure('tenants', data.records.tenants),
+              figure('your documents', data.records.uploads),
+            ),
+            data.records.properties === 0
+              ? el('p', { class: 'small' }, 'Add a property once, and every tenancy at that address inherits it.')
+              : null,
+          ],
+          canWrite() ? link('Properties & rooms', () => goTab('properties')) : null,
+        ),
+        card(
+          'People',
+          [
+            el(
+              'div',
+              { class: 'ov-figures' },
+              figure('accounts', data.people.total),
+              figure('owners', data.people.owners),
+              figure('agents', data.people.agents),
+              figure('landlords', data.people.landlords),
+            ),
+            el(
+              'p',
+              { class: 'small' },
+              data.people.operators.length === 0
+                ? 'No account reads the feedback queue.'
+                : `Reads the feedback queue: ${data.people.operators.join(', ')}.`,
+            ),
+          ],
+          isOwner() ? link('People & access', () => goTab('access')) : null,
+        ),
+        card(
+          'The installation',
+          [
+            el('div', { class: 'ov-figures' }, figure('database', bytes(data.care.databaseBytes)), figure('free disk', bytes(data.care.freeBytes))),
+            el('p', { class: 'small' }, `Last backup: ${lastBackup}`),
+            data.care.lastBackupAt === null
+              ? el('p', { class: 'small' }, 'If the backup job is not running, everything lives on one disk.')
+              : null,
+          ],
+          isOwner() ? link('Health & backup', () => goTab('health')) : null,
+        ),
+      ),
+      data.feedback === null
+        ? el('div')
+        : card(
+            'Feedback',
+            [
+              el('div', { class: 'ov-figures' }, figure('waiting for you', data.feedback.waiting)),
+              el(
+                'p',
+                { class: 'small' },
+                data.feedback.waiting === 0
+                  ? 'Nothing waiting. Anything handled has been cleared.'
+                  : `${data.feedback.waiting} report${data.feedback.waiting === 1 ? '' : 's'} from testers — new or being looked at.`,
+              ),
+            ],
+            link('Read it', () => openFeedbackQueue()),
+          ),
+      card(
+        'Recent activity',
+        [
+          activityRows.length === 0
+            ? el('p', { class: 'small' }, 'Nothing recorded yet.')
+            : el('div', { class: 'ov-activity' }, ...activityRows),
+        ],
+      ),
+    );
+  })();
+
+  return box;
+}
+
 /* ------------------------------------------------------ people and access --- */
 
 /** A password a person can actually type, and that nobody can guess. */
@@ -3739,6 +4008,56 @@ function renderAccessSection() {
             person.disabled ? 'Switch on' : 'Switch off',
           ),
           el('button', { class: 'btn btn-sm', type: 'button', onClick: () => passwordDialog(person) }, 'Set a password'),
+          el(
+            'button',
+            {
+              class: 'btn btn-sm btn-danger',
+              type: 'button',
+              title: 'Remove this account for good',
+              onClick: async () => {
+                const sure = window.confirm(
+                  `Delete ${person.name || person.email}?\n\nThe account and its sessions go. What they did stays in the audit trail, under their name.`,
+                );
+                if (!sure) return;
+                try {
+                  await api(`/api/users/${person.id}`, { method: 'DELETE' });
+                  toast('Account deleted.');
+                  refresh();
+                } catch (error) {
+                  toast(error.message, true);
+                }
+              },
+            },
+            'Delete',
+          ),
+        );
+      }
+
+      // The product-owner flag: only an operator may hand it on, and it never travels
+      // with the agency's ownership.
+      if (state.me?.isOperator === true && !person.disabled) {
+        actions.append(
+          el(
+            'button',
+            {
+              class: 'btn btn-sm btn-ghost',
+              type: 'button',
+              title: 'Decides who reads the feedback queue',
+              onClick: async () => {
+                try {
+                  await api(`/api/users/${person.id}/operator`, {
+                    method: 'POST',
+                    body: JSON.stringify({ isOperator: person.isOperator !== true }),
+                  });
+                  toast(person.isOperator ? 'The flag has been taken away.' : 'They can read the feedback queue now.');
+                  refresh();
+                } catch (error) {
+                  toast(error.message, true);
+                }
+              },
+            },
+            person.isOperator ? 'Remove product owner' : 'Make product owner',
+          ),
         );
       }
 
@@ -3753,6 +4072,7 @@ function renderAccessSection() {
             {},
             person.name || person.email,
             person.id === state.me?.id ? el('span', { class: 'small' }, ' (you)') : null,
+            person.isOperator === true ? el('span', { class: 'badge badge-ok' }, 'product owner') : null,
           ),
           el(
             'span',

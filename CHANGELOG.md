@@ -19,6 +19,45 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Fixed — a working queue that looked broken, and a back office with no front
+
+Reported from use: the top-bar Feedback button opened the settings form, and the queue
+answered "that is the product owner's list". Both were real, and neither was the other's
+cause.
+
+- **Two owner accounts.** `teems6uk@gmail.com` (the product owner) and `teems5uk@gmail.com`
+  (an owner, one character apart) both existed; the queue belonged to the first and the
+  person clicking was signed in as the second. The refusal was correct and useless.
+- **An identity a page could outlive.** The tab had been open for two days, so it still
+  believed it was signed in as the account that owns the queue, while every request
+  carried the newer cookie. API responses now carry `Cache-Control: no-store`, and the
+  interface re-reads `/api/auth/me` whenever the tab regains focus — if the person changed,
+  it re-renders for the person who is actually signed in.
+- **A refusal that explains itself.** A 403 from the queue now names the account that reads
+  it, says who you are, and states the two things that fix it. An *owner* is told; an agent
+  or a landlord still gets the plain refusal, because the operator's address is not theirs
+  to learn.
+- **The flag is manageable in the app.** People & access shows a **product owner** badge and
+  offers **Make product owner**; the last operator cannot give the flag up, and a
+  non-operator cannot grant it. `OPERATOR_EMAILS` seeds it at startup, and if that names
+  nobody the **oldest working owner** takes it — with an audit entry saying so — so an
+  installation can never end up with a queue nobody may open.
+- **Accounts can be deleted**, not only switched off: owner only, never yourself, never the
+  last owner, never the last operator. The stray owner account from the typo can now go.
+
+### Added — a back office that opens on the state of things
+
+**Back office** used to open on a blank settings form, which reads as "there is nothing
+here". It now opens on an **Overview**: tenancies (by lifecycle, documents produced, and
+the two things worth acting on — none yet, or not linked to a property), deadlines past and
+due soon, records, people, the installation's size and **when the last backup ran**, the
+feedback count for an operator, and the last few things that happened with the person's
+name on them. Every figure is a button to the screen that changes it, because a dashboard
+nobody acts on is decoration.
+
+`our details` is renamed **Agency settings** and sits at the end, where settings belong.
+One new endpoint, `GET /api/overview`, scoped for a landlord and hiding the feedback block
+from everyone but the operator.
 ### Changed — done means deleted, and the queue has its own screen
 
 Two corrections to the feedback engine, both from using it.

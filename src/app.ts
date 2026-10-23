@@ -8,6 +8,7 @@
 import Fastify, { type FastifyError, type FastifyInstance, type FastifyReply, type FastifyRequest } from 'fastify';
 import fastifyStatic from '@fastify/static';
 import { readFile } from 'node:fs/promises';
+import { readdirSync, statSync } from 'node:fs';
 import { join, resolve } from 'node:path';
 
 import type { AppConfig } from './config.ts';
@@ -156,6 +157,10 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   auth.purgeExpiredSessions();
   // Who owns the product, from OPERATOR_EMAILS: they alone read the feedback queue.
   auth.syncOperators(config.operatorEmails);
+  const promoted = auth.ensureOperator();
+  if (promoted !== null) {
+    auth.record({ kind: 'operator.assigned', detail: `${promoted} reads the feedback queue (no operator was named)` });
+  }
   const feedback = new FeedbackStore(store.handle);
   registerAuthGuard(app, { auth, store });
   registerAuthRoutes(app, { auth, backOffice });
@@ -276,6 +281,18 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
         response.header('Cache-Control', 'no-cache, must-revalidate');
       }
     },
+  });
+
+  /**
+   * No API response is cacheable.
+   *
+   * Identity and data both change, and a page that keeps its own copy of "who am I"
+   * can end up showing buttons for a person who is no longer signed in — which is
+   * exactly how a working feature was once reported as broken.
+   */
+  app.addHook('onSend', async (request, reply, payload) => {
+    if ((request.url ?? '').startsWith('/api/')) reply.header('Cache-Control', 'no-store');
+    return payload;
   });
 
   app.setErrorHandler((error: FastifyError, _request: FastifyRequest, reply: FastifyReply) => {
@@ -816,6 +833,105 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.code(200).header('Content-Type', 'text/html; charset=utf-8').send(html);
   });
 
+  // --- the overview -------------------------------------------------------
+
+  /**
+   * One answer to "what is the state of things?" — the first thing the back office
+   * should say. Every number here links to the screen that changes it, because a
+   * dashboard nobody acts on is decoration.
+   */
+  app.get('/api/overview', async (request) => {
+    const viewer = currentUser(request);
+    const landlordScope = viewer !== null && isLandlord(viewer) ? viewer.landlordId : null;
+
+    const allPacks = store.listPacks();
+    const packs =
+      landlordScope === null ? allPacks : allPacks.filter((pack) => pack.landlordId === landlordScope);
+
+    const lifecycle: Record<string, number> = { upcoming: 0, active: 0, ending: 0, ended: 0 };
+    let documents = 0;
+    let withoutDocuments = 0;
+    let withoutProperty = 0;
+    for (const pack of packs) {
+      lifecycle[pack.lifecycle] = (lifecycle[pack.lifecycle] ?? 0) + 1;
+      const produced = store.listDocuments(pack.id).length;
+      documents += produced;
+      if (produced === 0) withoutDocuments += 1;
+      if (pack.propertyId === null) withoutProperty += 1;
+    }
+
+    const due = aggregateDue(store, backOffice);
+    const dueItems =
+      landlordScope === null
+        ? due.items
+        : due.items.filter((item) => {
+            const pack = store.findPack(item.packId);
+            return pack !== null && pack.landlordId === landlordScope;
+          });
+
+    const properties = backOffice.listProperties();
+    const visibleProperties =
+      landlordScope === null
+        ? properties
+        : properties.filter((property) => property.landlordId === landlordScope);
+
+    const users = auth.listUsers();
+    const uploads = customTemplates.list().length;
+    const storage = await healthOf(store.handle, config.dataDir);
+    const lastBackup = latestBackupAge(config.backupDir);
+
+    return {
+      tenancies: {
+        total: packs.length,
+        lifecycle,
+        documents,
+        withoutDocuments,
+        withoutProperty,
+      },
+      records: {
+        landlords:
+          landlordScope === null
+            ? backOffice.listLandlords().length
+            : backOffice.listLandlords().filter((landlord) => landlord.id === landlordScope).length,
+        properties: visibleProperties.length,
+        rooms: landlordScope === null ? backOffice.listRooms().length : backOffice.listRooms().filter((room) => visibleProperties.some((property) => property.id === room.propertyId)).length,
+        tenants: backOffice.listTenants().length,
+        uploads,
+      },
+      people: {
+        total: users.length,
+        owners: users.filter((user) => user.role === 'owner').length,
+        agents: users.filter((user) => user.role === 'agent').length,
+        landlords: users.filter((user) => user.role === 'landlord').length,
+        disabled: users.filter((user) => user.disabledAt !== null).length,
+        operators: users.filter((user) => user.isOperator && user.disabledAt === null).map((user) => user.email),
+      },
+      deadlines: {
+        overdue: dueItems.filter((item) => item.daysUntil < 0).length,
+        soon: dueItems.filter((item) => item.daysUntil >= 0 && item.daysUntil <= 30).length,
+        total: dueItems.length,
+      },
+      activity:
+        viewer === null || !viewer.isOperator
+          ? auth
+              .recentEvents(40)
+              .filter((event) => !event.kind.startsWith('operator.') && !event.kind.startsWith('user.'))
+              .slice(0, 10)
+              .map((event) => ({ at: event.at, kind: event.kind, actor: event.actorName, detail: event.detail }))
+          : auth
+              .recentEvents(10)
+              .map((event) => ({ at: event.at, kind: event.kind, actor: event.actorName, detail: event.detail })),
+      care: {
+        databaseBytes: storage.databaseBytes,
+        freeBytes: storage.freeBytes,
+        totalBytes: storage.totalBytes,
+        lastBackupAt: lastBackup.at,
+        lastBackupBytes: lastBackup.bytes,
+      },
+      feedback: viewer !== null && viewer.isOperator ? { waiting: newFeedbackWaiting(feedback) } : null,
+      you: viewer === null ? null : { name: viewer.name, email: viewer.email, role: viewer.role, isOperator: viewer.isOperator },
+    };
+  });
   // --- packs --------------------------------------------------------------
 
   app.get('/api/packs', async (request) => {
@@ -1186,6 +1302,26 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
   });
 
   return app;
+}
+
+/** The newest backup in a folder and its date, for the care panel. */
+function latestBackupAge(dir: string): { at: string | null; bytes: number } {
+  try {
+    const files = readdirSync(dir).filter((name) => name.endsWith('.tar.gz'));
+    if (files.length === 0) return { at: null, bytes: 0 };
+    const newest = files
+      .map((name) => ({ name, stat: statSync(join(dir, name)) }))
+      .sort((left, right) => right.stat.mtimeMs - left.stat.mtimeMs)[0];
+    return newest === undefined ? { at: null, bytes: 0 } : { at: newest.stat.mtime.toISOString(), bytes: newest.stat.size };
+  } catch {
+    return { at: null, bytes: 0 };
+  }
+}
+
+/** How many feedback records are waiting on the operator. */
+function newFeedbackWaiting(feedback: FeedbackStore): number {
+  const counts = feedback.counts();
+  return (counts['new'] ?? 0) + (counts['triaged'] ?? 0);
 }
 
 function paramId(request: FastifyRequest): string {

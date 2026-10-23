@@ -386,7 +386,7 @@ npm install -g pnpm@10
 git clone <your-repo-url> ~/tenancydesk
 cd ~/tenancydesk
 pnpm install
-pnpm test          # 346 tests, no API key needed
+pnpm test          # 356 tests, no API key needed
 ```
 
 **Configuration in one root-owned file**, so the key is not in the project folder
