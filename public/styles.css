@@ -253,7 +253,9 @@ button { font: inherit; }
 
 /* --- assistant ------------------------------------------------------------ */
 
-.assistant { display: grid; grid-template-rows: minmax(0, 1fr) auto; gap: 1rem; min-height: 55vh; }
+.assistant { display: grid; grid-template-rows: auto minmax(0, 1fr) auto; gap: 1rem; min-height: 55vh; }
+.assistant-top { display: grid; gap: .7rem; }
+.guide-dock:empty { display: none; }
 .chat-log {
   display: flex; flex-direction: column; gap: .9rem;
   padding-bottom: .5rem; padding-right: .35rem;
@@ -1075,3 +1077,47 @@ body.is-gate .main { display: grid; place-items: center; min-height: 70vh; }
 }
 .guide-output { display: grid; gap: .2rem; }
 .guide-output p { margin: .2rem 0 0; }
+/* --- the back office, grouped ----------------------------------------------- */
+
+.bo-links { display: grid; gap: .7rem 1.4rem; margin-bottom: 1rem; }
+.bo-group { display: grid; gap: .35rem; align-content: start; }
+.bo-group-label {
+  font-size: .68rem;
+  font-weight: 700;
+  letter-spacing: .09em;
+  text-transform: uppercase;
+  color: var(--muted);
+}
+.bo-group-buttons { display: flex; gap: .4rem; flex-wrap: wrap; }
+@media (min-width: 900px) {
+  .bo-links { grid-auto-flow: column; justify-content: start; align-items: start; }
+}
+.guide-step.is-skipped { opacity: .45; }
+.guide-skipped-tag {
+  margin-left: .4rem;
+  font-size: .68rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--muted);
+  border: 1px solid var(--line);
+  border-radius: 999px;
+  padding: 0 .35rem;
+}
+.guide-resume-tag {
+  margin-left: .4rem;
+  font-size: .68rem;
+  letter-spacing: .05em;
+  text-transform: uppercase;
+  color: var(--accent);
+  background: var(--accent-soft);
+  border-radius: 999px;
+  padding: 0 .4rem;
+}
+.guide-finding {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: .5rem;
+  font-size: .82rem;
+  padding: .15rem 0;
+}

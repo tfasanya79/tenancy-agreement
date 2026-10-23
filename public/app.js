@@ -30,6 +30,9 @@ const state = {
   /** Which guide is being followed, and what the server last said about this pack. */
   guide: null,
   guidance: null,
+  guidanceFor: null,
+  /** Steps skipped this session: navigation, never a claim of progress. */
+  guideSkipped: [],
   /** Set when the person takes the zip, because a download cannot be observed. */
   guideDownloaded: false,
   streaming: false,
@@ -757,9 +760,7 @@ function renderAssistant() {
   const messages = state.chat.get(packId) || [];
   const log = el('div', { class: 'chat-log', id: 'chat-log' });
 
-  if (messages.length === 0) {
-    log.append(guidanceStart(packId));
-  }
+
 
   for (const message of messages) {
     // Never render an empty bubble: a stream that produced no text (or a turn
@@ -864,7 +865,13 @@ function renderAssistant() {
           : 'No DeepSeek API key found, so the assistant cannot answer. Add DEEPSEEK_API_KEY to your .env file and restart. Meanwhile you can fill in the Details tab by hand.',
       );
 
-  const content = el('div', { class: 'assistant' }, notice, log, composer);
+  // The guide lives in its own dock above the transcript: a guide whose own step sends a
+  // message used to destroy the rail it had just used, because it was mounted inside the log.
+  const dock = el('div', { class: 'guide-dock', id: 'guide-dock' });
+  void drawGuidanceDock(packId, dock);
+  const top = el('div', { class: 'assistant-top' }, notice, dock);
+
+  const content = el('div', { class: 'assistant' }, top, log, composer);
   requestAnimationFrame(() => {
     const logNow = $('#chat-log');
     if (logNow) logNow.scrollTop = logNow.scrollHeight;
@@ -2285,26 +2292,47 @@ async function renderDue(main) {
  * The order and the ticks both come from the server (`/guidance`), which reads the pack
  * itself. Nothing here decides that a step is finished — the model least of all.
  */
-function guidanceStart(packId) {
-  const wrap = el('div', { class: 'guide-start' }, el('div', { class: 'msg-bubble' }, el('p', {}, 'Working out where this pack stands…')));
-  void redrawGuidance(packId, wrap);
-  return wrap;
+/** Where the guide lives: its own dock, above the transcript, never inside it. */
+function drawGuidanceDock(packId, dock) {
+  const said = (state.chat.get(packId) ?? []).length > 0;
+  if ((state.guide === null || state.guide === undefined) && said) {
+    // Mid-conversation with no guide: stay out of the way.
+    dock.replaceChildren();
+    return;
+  }
+  if (state.guide === null || state.guide === undefined) {
+    dock.replaceChildren(el('div', { class: 'guide-start' }, el('p', { class: 'small' }, 'Working out where this pack stands…')));
+  }
+  void redrawGuidance(packId, dock);
+}
+
+/** The guidance for a pack, fetched once per pack and refreshed after an action. */
+async function guidanceFor(packId) {
+  if (state.guidance !== null && state.guidanceFor === packId) return state.guidance;
+  const data = await api(`/api/packs/${packId}/guidance`);
+  state.guidance = data;
+  state.guidanceFor = packId;
+  return data;
 }
 
 async function redrawGuidance(packId, wrap) {
   let data;
   try {
-    data = await api(`/api/packs/${packId}/guidance`);
+    data = await guidanceFor(packId);
   } catch (error) {
-    wrap.replaceChildren(el('div', { class: 'msg-bubble' }, el('p', {}, `I could not read this pack: ${error.message}`)));
+    wrap.replaceChildren(el('div', { class: 'guide-start' }, el('p', { class: 'small' }, `I could not read this pack: ${error.message}`)));
     return;
   }
 
-  state.guidance = data;
-
-  const chosen = state.guide === null || state.guide === undefined ? null : data.options.find((option) => option.id === state.guide);
-  const guide = chosen ?? data.options.find((option) => data.resume !== null && option.id === data.resume.guideId) ?? null;
+  const guideId = state.guide === null || state.guide === undefined ? null : state.guide;
+  const chosen = guideId === null ? null : data.options.find((option) => option.id === guideId);
+  const guide = chosen ?? (guideId === null ? data.options.find((option) => data.resume !== null && option.id === data.resume.guideId) ?? null : null);
   if (guide !== null && state.guide === null) state.guide = guide.id;
+
+  if (guide === null && (state.chat.get(packId) ?? []).length > 0) {
+    wrap.replaceChildren();
+    return;
+  }
 
   const heading =
     data.landlord === true
@@ -2329,7 +2357,13 @@ async function redrawGuidance(packId, wrap) {
   // A guide under way shows its steps; otherwise, the ranked cards.
   const body =
     guide === null || guide.complete || data.options.length === 0
-      ? el('div', { class: 'guide-cards' }, ...data.options.map((option) => guideCard(option, packId)))
+      ? el(
+          'div',
+          { class: 'guide-cards' },
+          ...data.options.map((option) =>
+            guideCard(option, packId, false, data.resume !== null && data.resume.guideId === option.id),
+          ),
+        )
       : el(
           'div',
           {},
@@ -2340,7 +2374,7 @@ async function redrawGuidance(packId, wrap) {
   wrap.replaceChildren(intro, body);
 }
 
-function guideCard(option, packId, slim = false) {
+function guideCard(option, packId, slim = false, isResume = false) {
   const remaining = option.steps.length - option.at;
   return el(
     'button',
@@ -2349,10 +2383,12 @@ function guideCard(option, packId, slim = false) {
       type: 'button',
       onClick: async () => {
         state.guide = option.id;
+        state.guideSkipped = [];
         await renderMain();
+        requestAnimationFrame(() => $('#guide-primary')?.focus());
       },
     },
-    el('strong', {}, option.title),
+    el('strong', {}, option.title, isResume && !option.complete && option.at > 0 ? el('span', { class: 'guide-resume-tag' }, 'continue') : null),
     el('span', { class: 'guide-why' }, option.why),
     el(
       'span',
@@ -2366,22 +2402,29 @@ function guideCard(option, packId, slim = false) {
 /** The steps, with what is finished ticked by the server and one action at a time. */
 function guideRail(guide, packId) {
   // The app cannot see a download, so the person who took the file ticks that one.
-  const steps0 = guide.steps.map((step) =>
-    step.id === 'download' && state.guideDownloaded === true ? { ...step, done: true } : step,
-  );
-  const at = steps0.findIndex((step) => !step.done);
+  const skipped = state.guideSkipped ?? [];
+  const steps0 = guide.steps.map((step) => {
+    const downloaded = step.id === 'download' && state.guideDownloaded === true;
+    return { ...step, done: step.done || downloaded, skipped: !step.done && !downloaded && skipped.includes(step.id) };
+  });
+  // A skipped step is navigation, not progress: it is passed over, never ticked.
+  const at = steps0.findIndex((step) => !step.done && !step.skipped);
   const current = at === -1 ? undefined : steps0[at];
   guide = { ...guide, steps: steps0, at: at === -1 ? steps0.length : at };
 
   const steps = guide.steps.map((step, index) =>
     el(
       'div',
-      { class: `guide-step${step.done ? ' is-done' : ''}${index === guide.at ? ' is-current' : ''}` },
-      el('span', { class: 'guide-tick' }, step.done ? '✓' : String(index + 1)),
+      {
+        class: `guide-step${step.done ? ' is-done' : ''}${index === guide.at ? ' is-current' : ''}${step.skipped ? ' is-skipped' : ''}`,
+        role: 'listitem',
+        'aria-current': index === guide.at ? 'step' : null,
+      },
+      el('span', { class: 'guide-tick', 'aria-hidden': 'true' }, step.done ? '✓' : step.skipped ? '·' : String(index + 1)),
       el(
         'div',
         { class: 'guide-step-text' },
-        el('strong', {}, step.title),
+        el('strong', {}, step.title, step.skipped ? el('span', { class: 'guide-skipped-tag' }, 'skipped') : null),
         el('span', { class: 'small' }, step.what),
       ),
     ),
@@ -2390,13 +2433,51 @@ function guideRail(guide, packId) {
   const actions = el('div', { class: 'guide-actions' });
 
   if (current === undefined) {
-    actions.append(el('span', { class: 'small' }, 'That is everything for this pack.'));
+    const next = guide.then === null || guide.then === undefined
+      ? null
+      : (state.guidance?.options ?? []).find((option) => option.id === guide.then) ?? null;
+    actions.append(
+      el('span', { class: 'small' }, 'That is everything for this guide.'),
+      next === null
+        ? null
+        : el(
+            'button',
+            {
+              class: 'btn btn-primary btn-sm',
+              type: 'button',
+              onClick: async () => {
+                state.guide = next.id;
+                state.guideSkipped = [];
+                await renderMain();
+              },
+            },
+            `Carry on: ${next.title}`,
+          ),
+    );
   } else {
     actions.append(
       el(
         'button',
-        { class: 'btn btn-primary btn-sm', type: 'button', onClick: () => void guideDo(packId, current) },
+        {
+          id: 'guide-primary',
+          class: 'btn btn-primary btn-sm',
+          type: 'button',
+          onClick: () => void guideDo(packId, current),
+        },
         guideActionLabel(current),
+      ),
+      el(
+        'button',
+        {
+          class: 'btn btn-sm',
+          type: 'button',
+          title: 'Move on without doing this one. It will not be ticked.',
+          onClick: async () => {
+            state.guideSkipped = [...(state.guideSkipped ?? []), current.id];
+            await renderMain();
+          },
+        },
+        'Skip this step',
       ),
       el(
         'button',
@@ -2406,6 +2487,7 @@ function guideRail(guide, packId) {
           title: 'Leave this guide and use the tabs instead',
           onClick: async () => {
             state.guide = null;
+            state.guideSkipped = [];
             await renderMain();
           },
         },
@@ -2417,7 +2499,13 @@ function guideRail(guide, packId) {
     }
   }
 
-  return el('div', { class: 'guide-rail' }, ...steps, actions, el('div', { class: 'guide-output', id: 'guide-output' }));
+  return el(
+    'div',
+    { class: 'guide-rail', role: 'list', 'aria-label': `Steps in ${guide.title}` },
+    ...steps,
+    actions,
+    el('div', { class: 'guide-output', id: 'guide-output', 'aria-live': 'polite' }),
+  );
 }
 
 const guideActionLabel = (step) => {
@@ -2476,7 +2564,34 @@ async function guideDo(packId, step) {
           'div',
           {},
           el('p', { class: 'small' }, findings.length === 0 ? 'Nothing flagged.' : `${findings.length} to look at:`),
-          ...findings.slice(0, 5).map((finding) => el('p', { class: 'small' }, `• ${finding.title}`)),
+          ...findings.slice(0, 6).map((finding) =>
+            el(
+              'div',
+              { class: 'guide-finding' },
+              el('span', {}, `• ${finding.title}`),
+              el(
+                'button',
+                { class: 'btn btn-sm btn-ghost', type: 'button', onClick: () => checkFinding(finding, finding.severity) },
+                'Why?',
+              ),
+            ),
+          ),
+          canWrite() && findings.length > 0
+            ? el(
+                'button',
+                {
+                  class: 'btn btn-sm',
+                  type: 'button',
+                  style: { marginTop: '.35rem' },
+                  onClick: async () => {
+                    state.guide = 'fix-checks';
+                    state.guideSkipped = [];
+                    await renderMain();
+                  },
+                },
+                'Walk me through the fixes',
+              )
+            : null,
         ),
       );
       await reloadGuidance(packId);
@@ -2528,6 +2643,7 @@ async function guideDo(packId, step) {
 async function reloadGuidance(packId) {
   try {
     state.guidance = await api(`/api/packs/${packId}/guidance`);
+    state.guidanceFor = packId;
   } catch {
     // The rail keeps whatever it had; the ticks simply will not move.
   }
@@ -3137,24 +3253,49 @@ function askToContinue(asked, onContinue) {
   );
 }
 
-const BO_TABS = [
-  ['overview', 'Overview', ['owner', 'agent']],
-  ['settings', 'Agency settings', ['owner']],
-  ['properties', 'Properties & rooms', ['owner', 'agent']],
-  ['people', 'Landlords & tenants', ['owner', 'agent']],
-  ['documents', 'Our documents', ['owner', 'agent']],
-  ['access', 'People & access', ['owner']],
-  ['feedback', 'Feedback', ['owner'], true],
-  ['health', 'Health & backup', ['owner']],
-  ['tidy', 'Tidy up', ['owner']],
+/**
+ * The back office, grouped by what a person is trying to do — records, people, looking
+ * after the installation — rather than one flat row of nine that has to be read to be
+ * understood. Overview stands alone; it is where you land.
+ */
+const BO_GROUPS = [
+  { id: 'overview', label: null },
+  { id: 'records', label: 'Records' },
+  { id: 'people', label: 'People' },
+  { id: 'care', label: 'Care' },
+  { id: 'product', label: 'Product' },
 ];
 
-/** The tabs this person is allowed to see, in order. */
-function backOfficeTabs() {
+const BO_TABS = [
+  ['overview', 'Overview', ['owner', 'agent'], false, 'overview'],
+  ['properties', 'Properties & rooms', ['owner', 'agent'], false, 'records'],
+  ['people', 'Landlords & tenants', ['owner', 'agent'], false, 'records'],
+  ['documents', 'Our documents', ['owner', 'agent'], false, 'records'],
+  ['access', 'People & access', ['owner'], false, 'people'],
+  ['health', 'Health & backup', ['owner'], false, 'care'],
+  ['tidy', 'Tidy up', ['owner'], false, 'care'],
+  ['settings', 'Agency settings', ['owner'], false, 'care'],
   // The feedback queue is the product owner's, not the agency's: `operatorOnly`.
-  return BO_TABS.filter(([, , roles, operatorOnly]) =>
-    roles.includes(myRole()) && (operatorOnly !== true || state.me?.isOperator === true),
+  ['feedback', 'Feedback', ['owner'], true, 'product'],
+];
+
+/** The tabs this person may see, grouped, in order. */
+function backOfficeTabGroups() {
+  const allowed = BO_TABS.filter(
+    ([, , roles, operatorOnly]) =>
+      roles.includes(myRole()) && (operatorOnly !== true || state.me?.isOperator === true),
   );
+
+  return BO_GROUPS.map((group) => ({
+    id: group.id,
+    label: group.label,
+    tabs: allowed.filter(([, , , , groupId]) => groupId === group.id),
+  })).filter((group) => group.tabs.length > 0);
+}
+
+/** Flat list of what this person may see — used to decide the current tab. */
+function backOfficeTabs() {
+  return backOfficeTabGroups().flatMap((group) => group.tabs);
 }
 
 /** Load the agency's own records, uploads and health figures. */
@@ -3226,21 +3367,30 @@ function renderBackOffice(main) {
   const allowed = backOfficeTabs();
   const current = allowed.some(([id]) => id === state.boTab) ? state.boTab : (allowed[0]?.[0] ?? 'settings');
 
+  const tabButton = ([id, label]) =>
+    el(
+      'button',
+      {
+        class: `btn btn-sm${current === id ? ' is-active' : ''}`,
+        type: 'button',
+        'aria-current': current === id ? 'page' : null,
+        onClick: () => {
+          state.boTab = id;
+          renderMain();
+        },
+      },
+      label,
+    );
+
   const tabs = el(
     'div',
-    { class: 'bo-links' },
-    ...allowed.map(([id, label]) =>
+    { class: 'bo-links', role: 'navigation', 'aria-label': 'Back office sections' },
+    ...backOfficeTabGroups().map((group) =>
       el(
-        'button',
-        {
-          class: `btn btn-sm${current === id ? ' is-active' : ''}`,
-          type: 'button',
-          onClick: () => {
-            state.boTab = id;
-            renderMain();
-          },
-        },
-        label,
+        'div',
+        { class: 'bo-group' },
+        group.label === null ? null : el('span', { class: 'bo-group-label' }, group.label),
+        el('div', { class: 'bo-group-buttons' }, ...group.tabs.map(tabButton)),
       ),
     ),
   );

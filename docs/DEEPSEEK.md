@@ -143,3 +143,20 @@ Two things must be true of the model: it must support tool calling, and it shoul
 handle a system prompt of a few thousand tokens. If you swap providers, re-run
 `pnpm doctor` and then try the three shortcut buttons on a test pack before trusting
 it with a real tenant.
+
+## What costs a model call
+
+Not everything that looks like the assistant is the assistant. The guiding chat in
+`src/agent/guides.ts` decides what to offer by reading the pack — missing details,
+compliance counts, the documents that exist — so drawing the start screen costs nothing.
+
+| Where | Model call? |
+| --- | --- |
+| The cards at the start of the Assistant tab | **No** — one `GET /api/packs/:id/guidance` |
+| The step rail, its ticks, the handover to the next guide | **No** — all read from the pack |
+| "Reading a pasted email" step | **Yes** — that is the point of it |
+| "Write the message to the tenant" step | **Yes** — the draft is written by the model |
+| Every other step: details, checks, generate, download, upload, mapping | **No** — the same routes the buttons use |
+
+The two steps that do cost a call are marked `usesModel` in the guide definitions, so the
+price of a guide is visible in the code rather than implied.

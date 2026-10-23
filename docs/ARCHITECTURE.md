@@ -19,7 +19,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 379 tests on `node:test` |
+| Tests | `tests/` | 383 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -177,6 +177,12 @@ The model is used in exactly two step types — reading a pasted email, and writ
 tenant's message — and those are marked `usesModel` in the definitions so the cost of a
 guide is visible rather than implied.
 
+Two details of the interface are deliberate. The rail lives in its own dock **above** the
+transcript: it was once mounted inside the chat log, so a guide's own step — "Draft it for
+me" sends a message — destroyed the rail it had just used. And **skipping a step is
+navigation, not progress**: a skipped step is dimmed and passed over, never ticked, so the
+server's `done` flags remain the only record of what the pack actually holds.
+
 ## The agent loop
 
 `runAgent()` in `src/agent/loop.ts`:
@@ -319,6 +325,7 @@ data directory.
 | Add or change an assistant tool | `src/agent/tools.ts` (`TOOL_DEFINITIONS`, `executeTool`, `describeToolCall`, `summarise` in `loop.ts`) |
 | Change the assistant's behaviour | `src/agent/prompts.ts` |
 | Change what the Assistant offers at the start, or what counts as a finished step | `src/agent/guides.ts` |
+| Change how the back office tabs are grouped | `BO_GROUPS` in `public/app.js` |
 | Change retries, temperature or token limits | `src/agent/deepseek.ts` |
 | Change Word styling, fonts, margins | `src/docs/toDocx.ts` |
 | Change the printed/PDF look | `CSS` in `src/docs/toHtml.ts` |

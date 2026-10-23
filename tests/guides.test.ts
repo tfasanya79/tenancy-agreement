@@ -157,6 +157,35 @@ describe('done is read from the pack, not claimed', () => {
   });
 });
 
+describe('handover between guides', () => {
+  it('exposes the handover target in what it offers', () => {
+    const { options } = rankGuides(empty({ hasTenant: true }));
+    const start = options.find((option) => option.id === 'start-from-email');
+    // With a tenant already in, this guide is not offered; check the offered shape instead.
+    const ready = options.find((option) => option.id === 'ready-to-send');
+    assert.ok(ready);
+    assert.equal(ready.then, null, 'finishing a pack is the end of the road');
+
+    const fresh = rankGuides(empty()).options.find((option) => option.id === 'start-from-email');
+    assert.equal(fresh?.then, 'ready-to-send', 'starting from an email leads into finishing the pack');
+    assert.equal(start === undefined, true);
+  });
+
+  it('only ever hands over to a guide that exists', () => {
+    for (const guide of GUIDES) {
+      if (guide.then === undefined) continue;
+      assert.notEqual(guideById(guide.then), null, `${guide.id} hands over to ${guide.then}, which does not exist`);
+    }
+  });
+
+  it('offers the handover target as a real option when the first guide is done', () => {
+    // A pack that already has a tenant and details: starting from an email is moot, but
+    // the guide it hands over to is the one being offered — the chain is consistent.
+    const facts = empty({ hasTenant: true, missing: [] });
+    const ids = rankGuides(facts).options.map((option) => option.id);
+    assert.equal(ids.includes('ready-to-send'), true);
+  });
+});
 describe('the definitions themselves', () => {
   it('marks which steps cost a model call, so the cost is visible', () => {
     const asking = GUIDES.flatMap((guide) => guide.steps.filter((step) => step.usesModel).map((step) => step.id));

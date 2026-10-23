@@ -19,6 +19,39 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Fixed — the guide rail disappeared when a guide did its own work
+
+The rail was mounted inside the chat log, and the log only drew the guide when the
+transcript was empty. So a guide's own steps — *Paste it below*, *Draft it for me* — sent a
+message and destroyed the rail they had just used. It now lives in its own dock above the
+transcript, for the whole life of a guide, whatever is said in the chat.
+
+### Added — skip, handover and "continue"
+
+- **Skip this step** passes over one you will come back to. A skipped step is dimmed and
+  marked *skipped*; it is never ticked, because a tick means the pack changed and nothing
+  else. Skips last the session, so a reload returns to the honest position.
+- **Handover**: `then` is now in the guidance payload, and a guide that runs out of steps
+  offers the next one — *Carry on: Get this pack ready to send*.
+- A guide you were part way through is labelled **continue** on the start screen.
+- **Why?** on each finding in the checks step (the same explanation the Checks tab gives),
+  with **Walk me through the fixes** opening the fix guide.
+- Accessibility: the rail is a list with `aria-current="step"` on the current step, the
+  step output is an `aria-live` region, and focus moves to the primary action when a guide
+  starts.
+
+### Changed — the back office tabs are grouped
+
+One row of nine unlabelled buttons became labelled clusters: **Records** (Properties &
+rooms, Landlords & tenants, Our documents), **People** (People & access), **Care** (Health &
+backup, Tidy up, Agency settings) and **Product** (Feedback, product owner only), with
+**Overview** standing alone at the front.
+
+### Removed — the field nobody read
+
+`examplePrompts` was served by `/api/config` and read by no client since the interface
+shipped. It is gone from the config and from `src/agent/prompts.ts`, and the changelog
+claim that it had already been removed is corrected above.
 ### Added — the Assistant offers the next thing, and walks it to the end
 
 Reported: the chat should ask what you want to work on, offer the options, and take you
@@ -43,10 +76,12 @@ four for an empty pack and for one that is a download away from finished.
 - The download step is the one thing the app cannot verify; it ticks when the person takes
   the file, which is the honest way round.
 
-The four static chips and the never-read `examplePrompts` field are gone. 21 tests in
-`tests/guides.test.ts` pin the ranking per pack state, the landlord set, and that ticks come
-from facts; 2 more exercise the endpoint, including a landlord being told `404` for a pack
-that is not theirs.
+21 tests in `tests/guides.test.ts` pin the ranking per pack state, the landlord set, and
+that ticks come from facts; the endpoint tests include a landlord being told `404` for a
+pack that is not theirs.
+
+**Corrected:** this entry originally said the never-read `examplePrompts` field was
+already removed. It was not — `/api/config` went on serving it until the follow-up below.
 ### Fixed — a working queue that looked broken, and a back office with no front
 
 Reported from use: the top-bar Feedback button opened the settings form, and the queue

@@ -508,6 +508,12 @@ describe('the overview', () => {
 });
 
 describe('the guidance the assistant offers', () => {
+  it('no longer serves the example prompts nobody read', async () => {
+    const config = await as(cookie, { method: 'GET', url: '/api/config' });
+    assert.equal(config.statusCode, 200);
+    assert.equal('examplePrompts' in config.json(), false);
+  });
+
   it('offers the next thing, ranked by the pack, without a model', async () => {
     const created = await as(cookie, {
       method: 'POST',
@@ -532,7 +538,9 @@ describe('the guidance the assistant offers', () => {
 
     const empty = await as(cookie, { method: 'POST', url: '/api/packs', payload: { fields: {} } });
     const fresh = await as(cookie, { method: 'GET', url: `/api/packs/${empty.json().pack.id}/guidance` });
-    assert.equal(fresh.json().options[0].id, 'start-from-email');
+    const starting = fresh.json().options[0];
+    assert.equal(starting.id, 'start-from-email');
+    assert.equal(starting.then, 'ready-to-send', 'the payload says where the guide leads next');
   });
 
   it('gives a landlord the read-only set, and refuses another landlord’s pack', async () => {

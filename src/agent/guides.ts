@@ -270,6 +270,8 @@ export type OfferedGuide = {
   /** Index of the first step not done; `steps.length` when the guide is complete. */
   at: number;
   complete: boolean;
+  /** The guide to offer when this one runs out of steps, if any. */
+  then: string | null;
 };
 
 function offer(guide: Guide, facts: GuideFacts): OfferedGuide {
@@ -289,6 +291,7 @@ function offer(guide: Guide, facts: GuideFacts): OfferedGuide {
     steps,
     at: at === -1 ? steps.length : at,
     complete: at === -1,
+    then: guide.then ?? null,
   };
 }
 

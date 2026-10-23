@@ -23,7 +23,6 @@ import { assessPack, renderTemplate, type TemplateRegistry } from './docs/regist
 import { RULES_REVIEWED_ON, ruleById, searchRules } from './knowledge/rules.ts';
 import { DeepSeekClient } from './agent/deepseek.ts';
 import { runAgent, type AgentEvent } from './agent/loop.ts';
-import { EXAMPLE_PROMPTS } from './agent/prompts.ts';
 import { rankGuides } from './agent/guides.ts';
 import { createZip } from './util/zip.ts';
 import { buildPackSummaryText, packSummaryView } from './docs/packSummary.ts';
@@ -345,7 +344,6 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     offlineMode: config.offlineMode,
     rulesReviewedOn: RULES_REVIEWED_ON,
     templateWarnings: registry.warnings,
-    examplePrompts: EXAMPLE_PROMPTS,
     coreFields: CORE_FIELDS,
   }));
 

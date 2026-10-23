@@ -122,8 +122,12 @@ reads the pack and offers the **next few things worth doing**, best first:
 
 Each card says *why* it is being offered — "3 details are still needed before the
 agreement can be produced" — and picking one shows the steps as a rail: finished ones
-ticked, the current one highlighted, one button to do it, and **I'll do it myself** to
-leave the guide and use the tabs.
+ticked, the current one highlighted, one button to do it, **Skip this step** to pass over
+one you will come back to, and **I'll do it myself** to leave the guide and use the tabs.
+The rail stays put while you talk to the assistant, so asking it something mid-guide does
+not lose your place. When a guide runs out of steps it offers the next one — *Carry on:
+Get this pack ready to send* — and a guide you were part way through is marked **continue**
+next time you open the tab.
 
 Two things worth knowing about the guides:
 
@@ -272,10 +276,13 @@ because that is what you want when you press it:
 - **Feedback** — how many reports are waiting, if you are the product owner.
 - **Recent activity** — the last few things that happened, and who did them.
 
-Every number is a button to the screen that changes it. Underneath are the tabs, which are
-the filing cabinet: **Properties & rooms**, **Landlords & tenants**, **Our documents**,
-**People & access**, **Health & backup**, **Tidy up**, and **Agency settings** (the details
-that print on every document).
+Every number is a button to the screen that changes it. Underneath are the tabs, grouped by what you are trying to do rather than as one long row:
+
+- **Records** — Properties & rooms · Landlords & tenants · Our documents
+- **People** — People & access
+- **Care** — Health & backup · Tidy up · Agency settings (the details that print on every
+  document)
+- **Product** — Feedback, if you are the product owner
 ## A normal week
 
 **Monday — new tenancy agreed**

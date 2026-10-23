@@ -96,19 +96,3 @@ Warm, efficient, like a competent colleague. Lead with the outcome ("All eight d
 # Finishing
 When you have nothing left to do this turn, reply with a short summary of what you changed and what (if anything) the agent must do next — including any statutory deadline with its date.`;
 }
-
-export const EXAMPLE_PROMPTS: readonly { title: string; prompt: string }[] = [
-  {
-    title: 'Start from an email',
-    prompt:
-      'Paste the landlord’s email or your WhatsApp thread below. I’ll pull out the details and tell you what is still missing.',
-  },
-  {
-    title: 'Fill in what is missing',
-    prompt: 'Check this pack against the compliance rules and ask me for anything that is still blank.',
-  },
-  {
-    title: 'Generate the pack',
-    prompt: 'Run the checks and, if there are no errors, generate every document this tenant needs for move-in.',
-  },
-];
