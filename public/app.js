@@ -245,16 +245,8 @@ function renderIdentity() {
 }
 
 /** Straight to the queue, for the person who owns the product. */
-async function openFeedbackQueue() {
-  state.view = 'backoffice';
-  state.boTab = 'feedback';
-  if (state.backOffice === null || state.backOffice === undefined) {
-    try {
-      await loadBackOffice();
-    } catch (error) {
-      toast(error.message, true);
-    }
-  }
+function openFeedbackQueue() {
+  state.view = 'feedback';
   renderMain();
 }
 
@@ -532,6 +524,14 @@ function renderMain() {
 
   if (state.view === 'backoffice') {
     renderBackOffice(main);
+    return;
+  }
+
+  // The queue is its own view. Gating it inside the back office meant a stale identity
+  // payload — or any change to the tab rules — silently turned this button into the
+  // settings screen, which is exactly how it was reported.
+  if (state.view === 'feedback') {
+    renderFeedbackQueue(main);
     return;
   }
 
@@ -2596,28 +2596,59 @@ async function fileProposal() {
 
 /* ------------------------------------------------------ feedback, operator --- */
 
-/** The queue: the operator's side, and nobody else's. */
-function renderFeedbackQueue() {
-  const box = el('div', { class: 'bo-grid' }, el('p', { class: 'small' }, 'Loading feedback…'));
+/** The queue: the operator's side, and nobody else's. Its own view, not a tab. */
+function renderFeedbackQueue(main) {
+  const header = el(
+    'div',
+    { class: 'pack-head' },
+    el(
+      'div',
+      { class: 'pack-title' },
+      el('h2', {}, 'Feedback'),
+      el(
+        'div',
+        { class: 'pack-where' },
+        'What testers have asked for. Handled items are removed the moment you mark them done.',
+      ),
+    ),
+    el(
+      'div',
+      { class: 'pack-actions' },
+      el('a', { class: 'btn', href: '/api/feedback/export?private=1' }, 'Export as Markdown'),
+      el(
+        'button',
+        { class: 'btn', type: 'button', onClick: () => { state.view = 'tenancy'; renderMain(); } },
+        'Back to tenancies',
+      ),
+    ),
+  );
+
+  const body = el('div', { class: 'bo-grid' }, el('p', { class: 'small' }, 'Loading feedback…'));
+  main.replaceChildren(header, body);
 
   void (async () => {
     let data;
     try {
       data = await api('/api/feedback/queue');
     } catch (error) {
-      box.replaceChildren(el('div', { class: 'notice notice-err' }, error.message));
+      body.replaceChildren(el('div', { class: 'notice notice-err' }, error.message));
       return;
     }
 
     const counts = data.counts ?? {};
-    const rows = (data.items ?? []).map((item) => {
-      const note = el('input', { type: 'text', placeholder: 'Note to yourself', value: item.operatorNote ?? '' });
-      const publicNote = el('input', { type: 'text', placeholder: 'What to tell them (they see this)', value: item.publicNote ?? '' });
+    const items = data.items ?? [];
+    const refresh = () => renderFeedbackQueue($('#main'));
+
+    const row = (item) => {
       const status = el(
         'select',
         {},
-        ...(data.statuses ?? []).map((entry) => el('option', { value: entry.value, selected: entry.value === item.status }, entry.label)),
+        ...(data.statuses ?? [])
+          .filter((entry) => entry.value !== 'done')
+          .map((entry) => el('option', { value: entry.value, selected: entry.value === item.status }, entry.label)),
       );
+      const note = el('input', { type: 'text', placeholder: 'Note to yourself', value: item.operatorNote ?? '' });
+      const publicNote = el('input', { type: 'text', placeholder: 'What to tell them (they see this)', value: item.publicNote ?? '' });
 
       return el(
         'div',
@@ -2630,13 +2661,21 @@ function renderFeedbackQueue() {
             {},
             item.title,
             item.clusterCount > 1 ? el('span', { class: 'badge badge-ok' }, `asked ${item.clusterCount} times`) : null,
+            item.previousAsks > 0
+              ? el('span', { class: 'badge' }, `handled ${item.previousAsks} time${item.previousAsks === 1 ? '' : 's'} before`)
+              : null,
             item.needsReview.length > 0 ? el('span', { class: 'badge badge-warn' }, 'needs a look') : null,
           ),
-          el('span', {}, `${KIND_WORDS[item.kind] ?? item.kind} · ${item.userName} (${item.role})${item.screen === '' ? '' : ` · ${item.screen}`} · ${new Date(item.createdAt).toLocaleString('en-GB')}`),
+          el(
+            'span',
+            {},
+            `${KIND_WORDS[item.kind] ?? item.kind} · ${item.userName} (${item.role})${item.screen === '' ? '' : ` · ${item.screen}`} · ${new Date(item.createdAt).toLocaleString('en-GB')}`,
+          ),
           el('p', { class: 'small' }, item.summary),
           item.needsReview.length > 0
-            ? el('p', { class: 'small', style: { color: 'var(--warn-ink, #8a5a12)' } }, `Flagged: ${item.needsReview.join('; ')}`)
+            ? el('p', { class: 'small', style: { color: '#8a5a12' } }, `Flagged: ${item.needsReview.join('; ')}`)
             : null,
+          item.publicNote === '' ? null : el('p', { class: 'small' }, `You told them: ${item.publicNote}`),
         ),
         el(
           'div',
@@ -2645,54 +2684,102 @@ function renderFeedbackQueue() {
           note,
           publicNote,
           el(
-            'button',
-            {
-              class: 'btn btn-sm',
-              type: 'button',
-              onClick: async () => {
-                try {
-                  await api(`/api/feedback/${item.id}`, {
-                    method: 'PATCH',
-                    body: JSON.stringify({
-                      status: status.value,
-                      operatorNote: note.value,
-                      publicNote: publicNote.value,
-                    }),
-                  });
-                  toast('Saved.');
-                } catch (error) {
-                  toast(error.message, true);
-                }
+            'div',
+            { style: { display: 'flex', gap: '.35rem' } },
+            el(
+              'button',
+              {
+                class: 'btn btn-sm',
+                type: 'button',
+                onClick: async () => {
+                  try {
+                    await api(`/api/feedback/${item.id}`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({
+                        status: status.value,
+                        operatorNote: note.value,
+                        publicNote: publicNote.value,
+                      }),
+                    });
+                    toast('Saved.');
+                    refresh();
+                  } catch (error) {
+                    toast(error.message, true);
+                  }
+                },
               },
-            },
-            'Save',
+              'Save',
+            ),
+            el(
+              'button',
+              {
+                class: 'btn btn-sm btn-primary',
+                type: 'button',
+                title: 'Handled — this removes the record',
+                onClick: async () => {
+                  const sure = window.confirm(
+                    `Mark “${item.title}” done?\n\nIt is removed from this list straight away, with the tester's words and who sent them. Only an anonymous count of how often this is asked for is kept.`,
+                  );
+                  if (!sure) return;
+                  try {
+                    const result = await api(`/api/feedback/${item.id}`, {
+                      method: 'PATCH',
+                      body: JSON.stringify({ status: 'done' }),
+                    });
+                    toast(result?.message ?? 'Done — removed.');
+                    refresh();
+                  } catch (error) {
+                    toast(error.message, true);
+                  }
+                },
+              },
+              'Done',
+            ),
           ),
         ),
       );
-    });
+    };
 
-    box.replaceChildren(
+    const open = items.filter((item) => item.status !== 'declined');
+    const setAside = items.filter((item) => item.status === 'declined');
+
+    const sections = [
       el(
         'div',
         { class: 'bo-section' },
-        el(
-          'div',
-          { style: { display: 'flex', justifyContent: 'space-between', alignItems: 'baseline', gap: '1rem', flexWrap: 'wrap' } },
-          el('h3', {}, `Feedback · ${data.items?.length ?? 0}`),
-          el('a', { class: 'btn btn-sm', href: '/api/feedback/export?private=1' }, 'Export as Markdown'),
-        ),
+        el('h3', {}, `Waiting · ${open.length}`),
         el(
           'p',
           { class: 'small' },
-          `New ${counts.new ?? 0} · Being looked at ${counts.triaged ?? 0} · On the list ${counts.planned ?? 0} · Done ${counts.done ?? 0} · Not doing ${counts.declined ?? 0}`,
+          `${counts.new ?? 0} not looked at · ${counts.triaged ?? 0} being looked at · ${counts.planned ?? 0} on the list`,
         ),
-        el('p', { class: 'small' }, 'Only the product owner sees this. An agency owner never sees a landlord’s feedback.'),
+        open.length === 0
+          ? el('div', { class: 'notice notice-info' }, 'Nothing waiting. Everything you have dealt with has been cleared.')
+          : el('div', {}, ...open.map(row)),
       ),
-      rows.length === 0 ? el('div', { class: 'notice notice-info' }, 'Nothing yet.') : el('div', { class: 'bo-section' }, ...rows),
+    ];
+
+    if (setAside.length > 0) {
+      sections.push(
+        el(
+          'div',
+          { class: 'bo-section' },
+          el('h3', {}, `Set aside · ${setAside.length}`),
+          el('p', { class: 'small' }, 'Kept so the reason is not lost. Mark one done to remove it as well.'),
+          el('div', {}, ...setAside.map(row)),
+        ),
+      );
+    }
+
+    body.replaceChildren(
+      ...sections,
+      el(
+        'p',
+        { class: 'small' },
+        'Only the product owner sees this list. Marking something done deletes it — the tester’s words, the conversation and who sent them. What survives is an anonymous count, so “asked for four times” still shows on the next one.',
+      ),
     );
   })();
-
-  return box;
 }
 
 /* ----------------------------------------------------------- back office --- */
@@ -2883,7 +2970,11 @@ function renderBackOffice(main) {
   else if (current === 'people') body = renderPeopleSection(data);
   else if (current === 'documents') body = renderOurDocumentsSection();
   else if (current === 'access') body = renderAccessSection();
-  else if (current === 'feedback') body = renderFeedbackQueue();
+  else if (current === 'feedback') {
+    state.view = 'feedback';
+    renderMain();
+    return;
+  }
   else if (current === 'health') body = renderHealthSection();
   else if (current === 'tidy') body = renderMigrationSection(data);
   else body = renderSettingsSection(data);

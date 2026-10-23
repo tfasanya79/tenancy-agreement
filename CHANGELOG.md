@@ -19,6 +19,33 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Changed — done means deleted, and the queue has its own screen
+
+Two corrections to the feedback engine, both from using it.
+
+**Where it lives.** The queue was a tab inside the back office, gated on a client-side
+flag, and the top-bar Feedback button opened it by setting a tab. When that flag was
+missing from the page's cached identity payload, the tab silently vanished and the button
+opened the settings screen instead — a feature that looks absent rather than broken. The
+queue is now **its own view**: the button sets `state.view = 'feedback'` and the route is
+unconditional, so there is no tab list to fall out of and no fallback to fall into.
+
+**What done means.** It used to leave the record in place for ever. It now **deletes** it:
+the row, the conversation and who sent it, in the same request that marks it done, from
+the operator's list and from the sender's. *Not doing it* still keeps the record, in a
+**Set aside** section, so the reason survives; it can be marked done later.
+
+One thing is kept, deliberately: when a record is closed out, an anonymous line is added to
+`feedback_done` — the kind, the pattern of the title, a count and two dates, with no user,
+no email and no conversation. The next similar record shows **handled 3 times before**, so
+"the same thing keeps coming up" survives deletion without keeping anybody's words. That is
+the whole reason the tally exists: with nothing kept, the fourth person to ask for
+something would look like the first.
+
+Tests were rewritten to match, and they assert the awkward cases: a handled record is gone
+from both lists and its id answers `404` afterwards; closing it twice does not count it
+twice; a declined record is kept and can still be closed out; and the tally holds no email
+address or tenant name.
 ### Fixed — a tenant's name could not be mapped in your own document
 
 Found by testing the upload-and-fill route end to end, which had no route-level test

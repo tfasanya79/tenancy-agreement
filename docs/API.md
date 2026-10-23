@@ -171,7 +171,7 @@ because feedback is addressed to the platform and not to the agency it is about.
 | `POST` | `/api/feedback` | any signed-in user | Files the record: `{ kind, title, summary, area, sentiment?, screen?, packReference?, messages[] }` → `201 { feedback }`. Five an hour, then `429` |
 | `GET` | `/api/feedback/mine` | any signed-in user | Their own submissions, with `statusWords` for the interface |
 | `GET` | `/api/feedback/queue` | **operator** | `{ items, counts, statuses, kinds, areas }` |
-| `PATCH` | `/api/feedback/:id` | **operator** | `{ status?, operatorNote?, publicNote? }` — the public note is shown to the tester |
+| `PATCH` | `/api/feedback/:id` | **operator** | `{ status?, operatorNote?, publicNote? }` — the public note is shown to the tester. **`status: "done"` deletes the record** (and its conversation) and answers `{ removed: true }` |
 | `GET` | `/api/feedback/export` | **operator** | Markdown; `?private=1` includes the operator's own notes |
 | `GET` | `/api/feedback/summary` | any | Counts for the tab title; empty for anyone without the operator flag |
 

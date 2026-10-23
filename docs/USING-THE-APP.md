@@ -275,10 +275,15 @@ The person who owns the product reads it all in **Back office → Feedback**: a 
 statuses, duplicates counted (*asked 4 times*), anything containing personal data or a
 promise flagged for a careful read, and an export to Markdown.
 
-**Nothing is ever deleted from that queue.** Marking something *Done* or *Not doing it* is
-a status, not a removal: the record stays, with who sent it, what they said, and the
-outcome. A person who sent it keeps seeing it in their own list, with the outcome and any
-note. Five submissions a person per hour, to stop an accident becoming a flood.
+**Marking it done deletes it.** One press and a confirmation, and the record goes — the
+tester's words, the conversation and who sent them — from your list and from theirs. What
+is kept is a single anonymous count, so the next person to ask for the same thing shows as
+*handled 3 times before*; that count decides what to build next, and it holds nobody's
+words.
+
+*Not doing it* is different: that leaves the record in a **Set aside** section at the
+bottom, so the reason is not lost, and you can still mark it done later to clear it. Five
+submissions a person per hour, to stop an accident becoming a flood.
 
 ## A normal week
 

@@ -262,7 +262,7 @@ describe('the queue is the operator’s, and nobody else’s', () => {
     assert.match(seen.publicNote, /next release/);
   });
 
-  it('records when something was closed out', async () => {
+  it('removes a record when it is marked done, and says so', async () => {
     const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
     const item = queue.json().items[0];
     const done = await as(operatorCookie, {
@@ -270,8 +270,14 @@ describe('the queue is the operator’s, and nobody else’s', () => {
       url: `/api/feedback/${item.id}`,
       payload: { status: 'done' },
     });
-    assert.equal(done.json().feedback.status, 'done');
-    assert.notEqual(done.json().feedback.doneAt, null);
+    assert.equal(done.statusCode, 200);
+    assert.equal(done.json().removed, true);
+
+    const after = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
+    assert.equal(
+      after.json().items.some((entry: { id: string }) => entry.id === item.id),
+      false,
+    );
   });
 
   it('exports markdown for the operator only', async () => {

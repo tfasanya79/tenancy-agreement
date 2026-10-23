@@ -225,54 +225,138 @@ describe('the printed history', () => {
   });
 });
 
-describe('feedback is kept until somebody resolves it', () => {
-  const file = async (title: string, summary: string) => {
+describe('feedback is kept until it is marked done, and then removed', () => {
+  const file = async (title: string, summary: string, kind = 'improvement') => {
     const response = await as(cookie, {
       method: 'POST',
       url: '/api/feedback',
-      payload: { title, summary, kind: 'improvement', area: 'documents' },
+      payload: { title, summary, kind, area: 'documents' },
     });
     assert.equal(response.statusCode, 201, response.body);
     return response.json().feedback.id as string;
   };
 
-  it('stays in the queue after being marked done, and afterwards', async () => {
+  it('stays in the list while it is open, whatever its state', async () => {
     resetFeedbackLimits();
-    const id = await file('Keep things until resolved', 'This record must not disappear when it is closed.');
+    const id = await file('Keep this until it is done', 'An open record must stay visible.');
+
+    for (const status of ['triaged', 'planned']) {
+      const changed = await as(operatorCookie, {
+        method: 'PATCH',
+        url: `/api/feedback/${id}`,
+        payload: { status },
+      });
+      assert.equal(changed.statusCode, 200, changed.body);
+      const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
+      assert.ok(
+        queue.json().items.some((entry: { id: string }) => entry.id === id),
+        `${status} should still be in the list`,
+      );
+    }
+  });
+
+  it('is deleted the moment it is marked done — words, conversation and all', async () => {
+    resetFeedbackLimits();
+    const id = await file('Delete me when done', 'This one is handled straight away.');
 
     const done = await as(operatorCookie, {
       method: 'PATCH',
       url: `/api/feedback/${id}`,
-      payload: { status: 'done', publicNote: 'Sorted.' },
+      payload: { status: 'done' },
     });
     assert.equal(done.statusCode, 200);
+    assert.equal(done.json().removed, true);
+    assert.match(done.json().message, /removed from the list/i);
 
     const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
-    const item = queue.json().items.find((entry: { id: string }) => entry.id === id);
-    assert.ok(item, 'a resolved record is still in the list');
-    assert.equal(item.status, 'done');
+    assert.equal(
+      queue.json().items.some((entry: { id: string }) => entry.id === id),
+      false,
+      'a handled record must be gone from the queue',
+    );
 
     const mine = await as(cookie, { method: 'GET', url: '/api/feedback/mine' });
-    const mineItem = mine.json().items.find((entry: { id: string }) => entry.id === id);
-    assert.ok(mineItem, 'the person who sent it still sees it, with its outcome');
-    assert.equal(mineItem.statusWords, 'Done');
+    assert.equal(
+      mine.json().items.some((entry: { id: string }) => entry.id === id),
+      false,
+      'and gone from the list of the person who sent it',
+    );
+
+    // Nothing to change any more: the id no longer exists.
+    const again = await as(operatorCookie, {
+      method: 'PATCH',
+      url: `/api/feedback/${id}`,
+      payload: { status: 'triaged' },
+    });
+    assert.equal(again.statusCode, 404);
   });
 
-  it('cannot be deleted through the API — nothing removes a record', async () => {
-    const id = await file('Nothing deletes me', 'There is no delete route, by design.');
-    for (const method of ['DELETE', 'POST'] as const) {
-      const response = await as(cookie, {
-        method,
-        url: method === 'DELETE' ? `/api/feedback/${id}` : `/api/feedback/${id}`,
-        payload: {},
-      });
-      assert.equal(response.statusCode >= 400, true, `${method} should not succeed`);
+  it('remembers that the same thing was asked before, without keeping anybody’s words', async () => {
+    resetFeedbackLimits();
+    const first = await file('Filter the document list by type', 'Add a filter to the generated document list.', 'new_feature');
+    await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${first}`, payload: { status: 'done' } });
+
+    const second = await file('Filter the document list by type', 'Add a filter to the generated document list.', 'new_feature');
+    const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
+    const item = queue.json().items.find((entry: { id: string }) => entry.id === second);
+    assert.ok(item, 'the new ask is in the list');
+    assert.equal(item.previousAsks >= 1, true, 'it should know this was handled before');
+
+    // The tally carries no person and no conversation.
+    const tally = store.handle.prepare('SELECT kind, title, count FROM feedback_done').all() as unknown as Array<{
+      kind: string;
+      title: string;
+      count: number;
+    }>;
+    assert.equal(tally.length >= 1, true);
+    for (const row of tally) {
+      assert.equal(row.title.includes('Alex Morgan'), false);
+      assert.equal(row.kind.length > 0, true);
     }
+    const leaked = store.handle
+      .prepare('SELECT COUNT(*) AS count FROM feedback_done WHERE title LIKE ?')
+      .get('%owner@%') as { count: number };
+    assert.equal(leaked.count, 0, 'the tally must not hold an email address');
+  });
+
+  it('does not count a record twice if it is closed out again by mistake', async () => {
+    resetFeedbackLimits();
+    const id = await file('Say it twice', 'A record that is closed out once.');
+    await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${id}`, payload: { status: 'done' } });
+    const second = await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${id}`, payload: { status: 'done' } });
+    assert.equal(second.statusCode, 404, 'the second attempt finds nothing to delete');
+  });
+
+  it('keeps a declined record, so the reason is not lost', async () => {
+    const id = await file('Something we said no to', 'Recorded, and refused, but still recorded.');
+    await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${id}`, payload: { status: 'declined' } });
+    const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
+    assert.ok(queue.json().items.some((entry: { id: string }) => entry.id === id));
+    // And it can still be finished off later.
+    const done = await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${id}`, payload: { status: 'done' } });
+    assert.equal(done.json().removed, true);
+  });
+
+  it('does not cluster a new ask into a declined one', async () => {
+    resetFeedbackLimits();
+    const first = await file('Add a filter to the list', 'I want to filter the list of documents.');
+    await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${first}`, payload: { status: 'declined' } });
+    const second = await file('Add a filter to the list', 'I want to filter the list of documents.');
+
+    const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
+    const mine = queue.json().items.find((entry: { id: string }) => entry.id === second);
+    assert.equal(mine.clusterCount, 1, 'a refused ask should not gather support for a new one');
+  });
+
+  it('has no delete route: removal is only ever "done", by the operator', async () => {
+    const id = await file('Nothing deletes me directly', 'There is no delete endpoint, by design.');
+    const attempt = await as(operatorCookie, { method: 'DELETE', url: `/api/feedback/${id}` });
+    assert.equal(attempt.statusCode, 404);
     const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
     assert.ok(queue.json().items.some((entry: { id: string }) => entry.id === id));
   });
 
-  it('survives the app being closed and opened again', async () => {
+  it('survives the app being closed and opened again, while it is open', async () => {
     const dir = tempDir('td-feat-persist-');
     const first = new Store(dir);
     const auth = new AuthStore(first.handle, []);
@@ -290,7 +374,7 @@ describe('feedback is kept until somebody resolves it', () => {
       role: 'owner',
       kind: 'improvement',
       title: 'Kept across a restart',
-      summary: 'The record should outlive the process.',
+      summary: 'An open record should outlive the process.',
       area: 'other',
       messages: [{ role: 'tester', text: 'Kept across a restart' }],
     });
@@ -298,31 +382,17 @@ describe('feedback is kept until somebody resolves it', () => {
 
     const second = new Store(dir);
     try {
-      const reopened = new FeedbackStore(second.handle).get(created.id);
-      assert.ok(reopened, 'the record should still be there');
-      assert.equal(reopened.title, 'Kept across a restart');
-      assert.equal(reopened.messages.length, 1, 'and so should the conversation');
+      const reopened = new FeedbackStore(second.handle);
+      const item = reopened.get(created.id);
+      assert.ok(item, 'the record should still be there');
+      assert.equal(item.messages.length, 1, 'and so should the conversation');
+
+      // Then, and only then, done removes it.
+      assert.equal(reopened.complete(created.id).removed, true);
+      assert.equal(reopened.get(created.id), null);
     } finally {
       second.close();
     }
-  });
-
-  it('keeps a declined record too, so the reason is not lost', async () => {
-    const id = await file('Something we said no to', 'Recorded, and refused, but still recorded.');
-    await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${id}`, payload: { status: 'declined' } });
-    const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
-    assert.ok(queue.json().items.some((entry: { id: string }) => entry.id === id));
-  });
-
-  it('does not cluster a new ask into a declined one', async () => {
-    resetFeedbackLimits();
-    const first = await file('Add a filter to the list', 'I want to filter the list of documents.');
-    await as(operatorCookie, { method: 'PATCH', url: `/api/feedback/${first}`, payload: { status: 'declined' } });
-    const second = await file('Add a filter to the list', 'I want to filter the list of documents.');
-
-    const queue = await as(operatorCookie, { method: 'GET', url: '/api/feedback/queue' });
-    const mine = queue.json().items.find((entry: { id: string }) => entry.id === second);
-    assert.equal(mine.clusterCount, 1, 'a refused ask should not gather support for a new one');
   });
 
   it('shows counts to the operator and nothing to anybody else', async () => {
@@ -334,7 +404,6 @@ describe('feedback is kept until somebody resolves it', () => {
     assert.deepEqual(forOwner.json().counts, {}, 'an agency owner gets no counts');
   });
 });
-
 describe('the operator flag can be taken away', () => {
   it('is applied from the environment, and removed when it stops being listed', async () => {
     const dir = tempDir('td-feat-op-');

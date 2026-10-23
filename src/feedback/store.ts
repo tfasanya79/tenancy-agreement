@@ -60,6 +60,8 @@ export type Feedback = {
   status: FeedbackStatus;
   clusterId: string | null;
   clusterCount: number;
+  /** How many times this same ask has already been dealt with and removed. */
+  previousAsks: number;
   needsReview: string[];
   operatorNote: string;
   publicNote: string;
@@ -127,6 +129,18 @@ CREATE TABLE IF NOT EXISTS feedback_messages (
   at          TEXT NOT NULL
 );
 CREATE INDEX IF NOT EXISTS idx_feedback_messages ON feedback_messages(feedback_id);
+
+-- One anonymous line per pattern that has been dealt with. No person, no words, no
+-- conversation: deleting a record must not destroy the fact that the same thing keeps
+-- being asked for, which is the only evidence for what to build next.
+CREATE TABLE IF NOT EXISTS feedback_done (
+  id       TEXT PRIMARY KEY,
+  kind     TEXT NOT NULL,
+  title    TEXT NOT NULL,
+  count    INTEGER NOT NULL DEFAULT 1,
+  first_at TEXT NOT NULL,
+  last_at  TEXT NOT NULL
+);
 `;
 
 const nowIso = (): string => new Date().toISOString();
@@ -226,6 +240,7 @@ export class FeedbackStore {
       status: (row.status as FeedbackStatus | undefined) ?? 'new',
       clusterId: row.cluster_id,
       clusterCount: count,
+      previousAsks: this.#previousAsks(row.kind, `${row.title} ${row.summary}`),
       needsReview: row.needs_review === '' ? [] : row.needs_review.split('|'),
       operatorNote: row.operator_note,
       publicNote: row.public_note,
@@ -308,6 +323,55 @@ export class FeedbackStore {
     });
 
     return this.get(id) as Feedback;
+  }
+
+  /** How often this pattern has been closed out before, from the anonymous tally. */
+  #previousAsks(kind: string, text: string): number {
+    const rows = this.#db
+      .prepare('SELECT kind, title, count FROM feedback_done')
+      .all() as unknown as Array<{ kind: string; title: string; count: number }>;
+    let total = 0;
+    for (const row of rows) {
+      if (row.kind !== kind) continue;
+      if (similarity(text, row.title) >= FeedbackStore.SIMILAR) total += row.count;
+    }
+    return total;
+  }
+
+  /** Record the pattern, and nothing else, so the next identical ask is not blind. */
+  #remember(item: Feedback): void {
+    const rows = this.#db
+      .prepare('SELECT * FROM feedback_done')
+      .all() as unknown as Array<{ id: string; kind: string; title: string; count: number }>;
+    const text = `${item.title} ${item.summary}`;
+    const match = rows.find((row) => row.kind === item.kind && similarity(text, row.title) >= FeedbackStore.SIMILAR);
+
+    const at = nowIso();
+    if (match !== undefined) {
+      this.#db
+        .prepare('UPDATE feedback_done SET count = count + 1, last_at = ? WHERE id = ?')
+        .run(at, match.id);
+      return;
+    }
+    this.#db
+      .prepare('INSERT INTO feedback_done (id, kind, title, count, first_at, last_at) VALUES (?, ?, ?, 1, ?, ?)')
+      .run(randomUUID(), item.kind, item.title, at, at);
+  }
+
+  /**
+   * Done: the record is removed, at once — the row, its conversation and who sent it.
+   *
+   * What survives is one anonymous line counting the pattern, because "we have been
+   * asked for this four times" is the thing that decides what to build, and it is not
+   * personal data. Nothing that identifies the person or repeats their words is kept.
+   */
+  complete(id: string): { removed: boolean; title: string; previousAsks: number } {
+    const item = this.get(id);
+    if (item === null) return { removed: false, title: '', previousAsks: 0 };
+    this.#remember(item);
+    this.#db.prepare('DELETE FROM feedback_messages WHERE feedback_id = ?').run(id);
+    this.#db.prepare('DELETE FROM feedback WHERE id = ?').run(id);
+    return { removed: true, title: item.title, previousAsks: item.previousAsks + 1 };
   }
 
   get(id: string): Feedback | null {

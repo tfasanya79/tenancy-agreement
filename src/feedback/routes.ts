@@ -199,6 +199,17 @@ export function registerFeedbackRoutes(app: FastifyInstance, deps: FeedbackRoute
     const id = (request.params as Record<string, string>)['id'] ?? '';
     const body = (request.body ?? {}) as Body;
 
+    // Done means done: the record is removed immediately, and the reply says so rather
+    // than pretending it will stay in a list.
+    if (oneOf<FeedbackStatus>(body['status'], FEEDBACK_STATUSES, 'new') === 'done' && text(body['status']) !== '') {
+      const result = feedback.complete(id);
+      if (!result.removed) return reply.code(404).send({ error: 'That feedback is not in the list.' });
+      return {
+        removed: true,
+        message: `Done — removed from the list. This is the ${result.previousAsks === 1 ? 'first' : `${result.previousAsks}${result.previousAsks === 2 ? 'nd' : result.previousAsks === 3 ? 'rd' : 'th'}`} time this has been asked for.`,
+      };
+    }
+
     const updated = feedback.update(id, {
       ...(text(body['status']) === ''
         ? {}

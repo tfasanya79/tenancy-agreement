@@ -150,26 +150,32 @@ Until then, two rules hold: the queue is a route the operator alone may call (§
 backup archives must be treated as containing both — which they already are, being
 root-only and 600.
 
-## 7. Retention: nothing is deleted until somebody resolves it
+## 7. Retention: open until it is done, and then deleted
 
-- **A record is kept indefinitely.** There is no expiry, no purge job, and **no delete
-  route**: not for the tester, not for the operator. `DELETE /api/feedback/:id` does not
-  exist, and a test asserts that it stays that way.
-- **Marking something `done` or `declined` is a status, not a deletion.** The record stays
-  in the queue afterwards, with its date, its tester, the conversation and the outcome, so
-  "we said no to this in March, and here is why" survives. The tester keeps seeing it in
-  their own list, with the outcome and any note.
-- **Declining does not recycle it either.** A declined ask is excluded from duplicate
-  clustering — a refused idea must not gather apparent support for a new one — but the
-  record itself is untouched.
-- **The only thing that removes feedback is dropping the database**, which is the same act
-  as removing every tenancy.
+- **An open record is kept indefinitely.** No expiry, no purge job, no delete route:
+  `DELETE /api/feedback/:id` does not exist, and a test asserts it stays that way.
+- **Done deletes it, at once.** One press, one confirmation: the row, the conversation
+  and who sent it are removed. It leaves your queue in the same second and it leaves the
+  sender's own list — which is what "handled" should mean for a working inbox rather than
+  an archive.
+- **Set aside keeps it.** Marking something `declined` — *not doing it* — leaves the record
+  in place, in its own section at the bottom of the queue, so the reason is not lost. It
+  can be marked done later, which removes it as well.
+- **What survives deletion is an anonymous count.** When a record is done, the app adds or
+  increments one line in `feedback_done`: the kind, the pattern in the words of the title,
+  a count and two dates. **No user, no email, no conversation.** That is deliberate: the
+  fact that the same thing has been asked for four times is the best evidence for what to
+  build next, and it is not personal data. The queue shows it on the next similar record as
+  *handled 3 times before*, and duplicates among open records still count separately
+  (*asked 4 times*).
+- **Deletion is not a route.** The only way a record disappears is the operator marking it
+  done, or dropping the database — which is the same act as removing every tenancy.
 
-That is deliberate policy, not an omission: a feedback list that quietly forgets is a list
-nobody trusts, and the value of the queue is in the pattern across months, not the items in
-it today. If a purge is ever wanted, it should be an explicit, dated action that writes an
-event — not a background job.
-
+Why a tally rather than pure deletion: with nothing kept, the fourth person to ask for the
+same thing would look like the first, and you would decide what to build from whichever
+request happened to be open that day. Why a tally rather than the record: keeping the words
+and the sender would mean the list never actually empties, and would hold personal data for
+a purpose that has already been served.
 ## 8. Rate limits
 
 Five submissions per person per hour, and forty conversation turns. Both are **in memory**:
@@ -185,7 +191,7 @@ in plain words, and their earlier submissions are unaffected.
 | `POST` | `/api/feedback` | any signed-in user — the form, and the fallback when the model is unavailable |
 | `GET` | `/api/feedback/mine` | any signed-in user — their own submissions and statuses |
 | `GET` | `/api/feedback/queue` | **operator only** — the queue |
-| `PATCH` | `/api/feedback/:id` | **operator only** — status, operator note, public note |
+| `PATCH` | `/api/feedback/:id` | **operator only** — status, operator note, public note. `status: "done"` deletes the record and answers `{ removed: true }` |
 | `GET` | `/api/feedback/export` | **operator only** — markdown, for a file or a ticket |
 
 This needed one extension to `src/auth/guard.ts`, since done: access rules are
@@ -256,9 +262,9 @@ That fallback is also the first phase, so the queue is useful before any AI exis
   look like they contain it, and puts those in front of a human. That is cheaper than
   pretending it will not happen, and it is the same stance as the rest of the product:
   record it, do not silently lose it.
-- **Retention**: kept until somebody resolves it, and then kept anyway — see §7. That is
-  the policy, so the privacy notice should say it plainly rather than promise a tidy
-  expiry that does not exist.
+- **Retention**: open records are kept until handled; marking one done deletes it within
+  the same request, leaving only an anonymous count — see §7. The privacy notice should say
+  exactly that: kept until resolved, deleted on resolution, a count retained.
 - **A landlord's words never reach the agency.** This is a promise made in the
   interface, so it needs to be true in the code: organisation-scoped queries for
   everything else, and no route that returns feedback to an agency owner.
@@ -292,8 +298,9 @@ filed text (checked by test against the commitment detector); and with `OFFLINE_
 the form appears instead. **Done** — the `propose_feedback` schema is the contract, and
 `reviewFlags` catches both personal data and promises.
 
-**F3 — Reaching the tester.** Statuses surfaced to the submitter, public notes, and the
-"asked N times" count in the queue.
+**F3 — Reaching the tester.** Statuses surfaced to the submitter, public notes, the
+"asked N times" count among open records, and the "handled N times before" count from the
+tally left by deletion.
 
 *Done when:* a tester sees *On the list* the same day the operator sets it, and five
 similar submissions show as one row with a count of five and five names. **Done** for
@@ -321,7 +328,8 @@ and markdown export including private notes on request.
 | Fallback | `OFFLINE_MODE` → the form, and the record is still created |
 | Duplicates | four similar submissions produce one cluster with a count of four |
 | Rate limit | a fifth submission in a minute from one user is refused with an honest message |
-| Status loop | `PATCH` to `done` shows as Done on the tester's own list |
+| Status loop | `PATCH` to `planned` shows as *On the list* on the tester's own list; `PATCH` to `done` removes the record from both lists, and answers `{ removed: true }` |
+| The tally | closing a record writes one anonymous line: no user, no email, no conversation; a similar new record then shows *handled N times before* |
 
 ## 18. Risks
 
