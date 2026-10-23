@@ -60,7 +60,15 @@ export type Guide = {
   why: (facts: GuideFacts) => string;
   /** Lower runs first when several apply. */
   rank: number;
+  /** Position in the natural flow, used to order the ones not yet available. */
+  order?: number;
   when: (facts: GuideFacts) => boolean;
+  /**
+   * Shown when the guide is not available yet: what it will be for. A guide with no
+   * `later` line disappears once it can no longer apply — starting from an email has
+   * happened and will not happen again for this pack.
+   */
+  later?: string;
   steps: GuideStep[];
   /** Guides that hand over to another when their own steps are done. */
   then?: string;
@@ -73,6 +81,7 @@ export const GUIDES: Guide[] = [
     id: 'start-from-email',
     title: 'Start from the landlord’s email',
     rank: 5,
+    order: 10,
     when: (facts) => !facts.hasTenant,
     why: () => 'Paste what the landlord or the tenant sent you, and I will pull out the dates, the rent and the names.',
     steps: [
@@ -99,7 +108,9 @@ export const GUIDES: Guide[] = [
     id: 'ready-to-send',
     title: 'Get this pack ready to send',
     rank: 20,
+    order: 20,
     when: (facts) => facts.hasTenant,
+    later: 'The main way through a pack: details, checks, documents, the download and the message.',
     why: (facts) => {
       if (facts.missing.length > 0) {
         return `${plural(facts.missing.length, 'detail is', 'details are')} still needed before the agreement can be produced.`;
@@ -155,7 +166,9 @@ export const GUIDES: Guide[] = [
     id: 'fix-checks',
     title: 'Fix what the checks flagged',
     rank: 10,
+    order: 30,
     when: (facts) => facts.hasTenant && facts.errors > 0 && facts.missing.length === 0,
+    later: 'Comes up when the checks flag something.',
     why: (facts) => `${plural(facts.errors, 'item needs', 'items need')} a look before the pack goes out.`,
     steps: [
       {
@@ -164,7 +177,8 @@ export const GUIDES: Guide[] = [
         what: 'Each finding says what it is and where it came from.',
         usesModel: false,
         where: 'the Checks tab',
-        done: (facts) => facts.errors === 0,
+        // Not "no errors": an empty pack has none because there is nothing to check yet.
+        done: (facts) => facts.hasTenant && facts.errors === 0,
       },
     ],
   },
@@ -172,6 +186,7 @@ export const GUIDES: Guide[] = [
     id: 'use-our-document',
     title: 'Use our own document',
     rank: 30,
+    order: 50,
     when: (facts) => facts.uploads === 0 || facts.mappedUploads < facts.uploads,
     why: () =>
       'Upload your own agreement or report once, and every pack fills it in from then on — your layout, your wording.',
@@ -206,7 +221,9 @@ export const GUIDES: Guide[] = [
     id: 'tenant-message',
     title: 'Write the message to the tenant',
     rank: 12,
+    order: 40,
     when: (facts) => facts.hasTenant && facts.documents > 0 && !facts.hasCoverMessage,
+    later: 'Once the documents are produced, this writes what goes with them.',
     why: () => 'The pack is produced. The tenant needs a short email and a WhatsApp message to go with it.',
     steps: [
       {
@@ -272,6 +289,10 @@ export type OfferedGuide = {
   complete: boolean;
   /** The guide to offer when this one runs out of steps, if any. */
   then: string | null;
+  /** Whether this applies to the pack as it stands. */
+  applicable: boolean;
+  /** When it does not apply: what it will be for. Null when it is simply not shown. */
+  later: string | null;
 };
 
 function offer(guide: Guide, facts: GuideFacts): OfferedGuide {
@@ -292,6 +313,8 @@ function offer(guide: Guide, facts: GuideFacts): OfferedGuide {
     at: at === -1 ? steps.length : at,
     complete: at === -1,
     then: guide.then ?? null,
+    applicable: guide.when(facts),
+    later: guide.when(facts) ? null : (guide.later ?? null),
   };
 }
 
@@ -304,19 +327,30 @@ function offer(guide: Guide, facts: GuideFacts): OfferedGuide {
  */
 export function rankGuides(facts: GuideFacts): { options: OfferedGuide[]; resume: { guideId: string; step: number } | null } {
   const source = facts.isLandlord ? LANDLORD_GUIDES : GUIDES;
-  const offered = source.filter((guide) => guide.when(facts)).map((guide) => offer(guide, facts));
+  // Every guide that can still apply is offered: a menu with one item is not a menu, and
+  // hiding the rest is how somebody never discovers the flow. Finished guides drop out,
+  // and a guide that can never apply again (starting from an email, once there is a
+  // tenant) carries no `later` line and is not shown at all.
+  const offered = source
+    .map((guide) => ({ guide, offered: offer(guide, facts) }))
+    .filter(({ guide, offered: item }) => !item.complete && (item.applicable || guide.later !== undefined))
+    .map(({ offered: item }) => item);
 
   // Ranked by need, not by "something is half done". Almost every pack has *some* guide
   // part-finished, so promoting those would put the same card on top for ever and hide
   // what actually needs attention. A guide chosen in this session is remembered by the
   // interface instead.
+  const rankOf = (id: string): number => source.find((guide) => guide.id === id)?.rank ?? 99;
+  const orderOf = (id: string): number => source.find((guide) => guide.id === id)?.order ?? 99;
+
   const ordered = [...offered].sort((left, right) => {
-    const leftRank = source.find((guide) => guide.id === left.id)?.rank ?? 99;
-    const rightRank = source.find((guide) => guide.id === right.id)?.rank ?? 99;
-    return leftRank - rightRank;
+    // What is ready now comes first, by how much it is needed; what comes later follows
+    // in the order it will happen, so the list reads as the flow of a tenancy.
+    if (left.applicable !== right.applicable) return left.applicable ? -1 : 1;
+    return left.applicable ? rankOf(left.id) - rankOf(right.id) : orderOf(left.id) - orderOf(right.id);
   });
 
-  const first = ordered[0];
+  const first = ordered.find((option) => option.applicable);
   return {
     options: ordered,
     resume: first !== undefined && !first.complete && first.at > 0 ? { guideId: first.id, step: first.at } : null,

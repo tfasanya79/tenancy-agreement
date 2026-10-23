@@ -110,7 +110,9 @@ overwrites something you typed with a blank.
 ### Assistant
 
 Opening the Assistant does not give you an empty box and a guess at what to type. It
-reads the pack and offers the **next few things worth doing**, best first:
+reads the pack and lists **every task that can still apply to it** — the one to do next
+first, marked *suggested*, and under **Later in this tenancy** the ones that come after,
+each saying what it is for.
 
 | What it offers | When |
 | --- | --- |
@@ -120,8 +122,8 @@ reads the pack and offers the **next few things worth doing**, best first:
 | **Write the message to the tenant** | the pack is produced and the tenant has not been written to |
 | **Use our own document** | you have not uploaded your own agreement yet |
 
-Each card says *why* it is being offered — "3 details are still needed before the
-agreement can be produced" — and picking one shows the steps as a rail: finished ones
+Cards that are ready say *why* — "3 details are still needed before the agreement can be
+produced" — and every card shows a *→*. Picking one shows the steps as a rail: finished ones
 ticked, the current one highlighted, one button to do it, **Skip this step** to pass over
 one you will come back to, and **I'll do it myself** to leave the guide and use the tabs.
 The rail stays put while you talk to the assistant, so asking it something mid-guide does

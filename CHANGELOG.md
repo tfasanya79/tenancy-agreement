@@ -19,6 +19,22 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Fixed — the menu was a single card
+
+The feedback asked for the possible tasks as clickable options. `docs`-worthy honesty: the
+first implementation listed only the *best* one, so an empty pack showed a single card —
+"Start from the landlord's email" — and nothing else. A menu with one item is not a menu,
+and it hid the flow instead of teaching it.
+
+- **Every task that can still apply is listed**: what is ready now first, marked
+  *suggested*, then **Later in this tenancy** with the ones still to come, each saying what
+  it is for ("Once the documents are produced, this writes what goes with them"). A guide
+  whose steps are all done drops out.
+- The cards gained a *→*, a hover and focus state, and a suggested badge, because they read
+  as paragraphs rather than as things to press.
+- One predicate was wrong and showed up in the process: *fix what the checks flagged*
+  looked finished on an empty pack, because an empty pack has no errors. It now needs a
+  tenant before it can be counted as checked.
 ### Fixed — the guide rail disappeared when a guide did its own work
 
 The rail was mounted inside the chat log, and the log only drew the guide when the

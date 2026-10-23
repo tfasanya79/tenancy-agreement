@@ -1121,3 +1121,33 @@ body.is-gate .main { display: grid; place-items: center; min-height: 70vh; }
   font-size: .82rem;
   padding: .15rem 0;
 }
+/* The cards are the menu: they must read as things to press, not as paragraphs. */
+.guide-card { position: relative; border-width: 1px; border-color: var(--line-strong); }
+.guide-card::after { content: none; }
+.guide-card-head { display: flex; align-items: baseline; justify-content: space-between; gap: .6rem; }
+.guide-card-head strong { font-size: .95rem; }
+.guide-arrow { color: var(--accent); font-size: 1rem; opacity: .55; transition: transform .15s ease, opacity .15s ease; }
+.guide-card:hover .guide-arrow, .guide-card:focus-visible .guide-arrow { transform: translateX(2px); opacity: 1; }
+.guide-card.is-suggested { border-color: var(--accent); box-shadow: var(--shadow); background: var(--paper); }
+.guide-card.is-suggested .guide-card-head strong { color: var(--accent-dark, var(--accent)); }
+.guide-card:focus-visible { outline: 2px solid var(--accent); outline-offset: 2px; }
+.guide-suggested-tag {
+  margin-left: .45rem;
+  font-size: .66rem;
+  letter-spacing: .06em;
+  text-transform: uppercase;
+  color: #fff;
+  background: var(--accent);
+  border-radius: 999px;
+  padding: .05rem .4rem;
+  vertical-align: middle;
+}
+.guide-later { display: grid; gap: .35rem; margin-top: .3rem; }
+.guide-later > p { margin: 0; color: var(--muted); }
+.guide-card.is-later {
+  background: transparent;
+  border-style: dashed;
+  border-color: var(--line);
+}
+.guide-card.is-later .guide-card-head strong { color: var(--ink-soft); font-weight: 500; }
+.guide-card.is-later .guide-arrow { opacity: .3; }

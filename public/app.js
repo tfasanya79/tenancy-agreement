@@ -2354,32 +2354,72 @@ async function redrawGuidance(packId, wrap) {
     ),
   );
 
-  // A guide under way shows its steps; otherwise, the ranked cards.
+  // A guide under way shows its steps; otherwise, the menu.
+  const ready = data.options.filter((option) => option.applicable !== false);
+  const later = data.options.filter((option) => option.applicable === false);
+  const suggestedId = ready.length > 0 ? ready[0].id : null;
+
   const body =
-    guide === null || guide.complete || data.options.length === 0
+    guide === null || data.options.length === 0
       ? el(
           'div',
-          { class: 'guide-cards' },
-          ...data.options.map((option) =>
-            guideCard(option, packId, false, data.resume !== null && data.resume.guideId === option.id),
+          {},
+          el(
+            'div',
+            { class: 'guide-cards' },
+            ...ready.map((option) =>
+              guideCard(option, packId, {
+                suggested: option.id === suggestedId,
+                isResume: data.resume !== null && data.resume.guideId === option.id,
+              }),
+            ),
           ),
+          later.length === 0
+            ? null
+            : el(
+                'div',
+                { class: 'guide-later' },
+                el('p', { class: 'small' }, 'Later in this tenancy'),
+                el(
+                  'div',
+                  { class: 'guide-cards' },
+                  ...later.map((option) => guideCard(option, packId, { later: true })),
+                ),
+              ),
         )
       : el(
           'div',
           {},
-          el('div', { class: 'guide-cards guide-cards-slim' }, ...data.options.filter((option) => option.id !== guide.id).map((option) => guideCard(option, packId, true))),
+          ready.length > 1
+            ? el(
+                'div',
+                { class: 'guide-cards guide-cards-slim' },
+                ...ready
+                  .filter((option) => option.id !== guide.id)
+                  .map((option) => guideCard(option, packId, { slim: true })),
+              )
+            : null,
           guideRail(guide, packId),
+          later.length === 0
+            ? null
+            : el(
+                'div',
+                { class: 'guide-later' },
+                el('p', { class: 'small' }, 'Later in this tenancy'),
+                el('div', { class: 'guide-cards guide-cards-slim' }, ...later.map((option) => guideCard(option, packId, { later: true, slim: true }))),
+              ),
         );
 
   wrap.replaceChildren(intro, body);
 }
 
-function guideCard(option, packId, slim = false, isResume = false) {
+function guideCard(option, packId, options = {}) {
+  const { slim = false, later = false, suggested = false, isResume = false } = options;
   const remaining = option.steps.length - option.at;
   return el(
     'button',
     {
-      class: `guide-card${slim ? ' is-slim' : ''}`,
+      class: `guide-card${slim ? ' is-slim' : ''}${later ? ' is-later' : ''}${suggested ? ' is-suggested' : ''}`,
       type: 'button',
       onClick: async () => {
         state.guide = option.id;
@@ -2388,13 +2428,24 @@ function guideCard(option, packId, slim = false, isResume = false) {
         requestAnimationFrame(() => $('#guide-primary')?.focus());
       },
     },
-    el('strong', {}, option.title, isResume && !option.complete && option.at > 0 ? el('span', { class: 'guide-resume-tag' }, 'continue') : null),
-    el('span', { class: 'guide-why' }, option.why),
+    el(
+      'span',
+      { class: 'guide-card-head' },
+      el(
+        'strong',
+        {},
+        option.title,
+        suggested ? el('span', { class: 'guide-suggested-tag' }, 'suggested') : null,
+        isResume && !option.complete && option.at > 0 ? el('span', { class: 'guide-resume-tag' }, 'continue') : null,
+      ),
+      el('span', { class: 'guide-arrow', 'aria-hidden': 'true' }, '→'),
+    ),
+    el('span', { class: 'guide-why' }, later ? option.later : option.why),
     el(
       'span',
       { class: 'guide-meta' },
-      option.complete ? 'done' : `${remaining} step${remaining === 1 ? '' : 's'}`,
-      option.at > 0 ? ` · ${option.at} done` : '',
+      later ? `starts at: ${option.steps[0]?.title ?? ''}` : option.complete ? 'done' : `${remaining} step${remaining === 1 ? '' : 's'}`,
+      !later && option.at > 0 ? ` · ${option.at} done` : '',
     ),
   );
 }

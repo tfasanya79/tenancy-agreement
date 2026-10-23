@@ -29,6 +29,47 @@ const empty = (overrides: Partial<GuideFacts> = {}): GuideFacts => ({
 const ids = (facts: GuideFacts): string[] => rankGuides(facts).options.map((option) => option.id);
 
 describe('what is offered, and in what order', () => {
+  it('shows a menu, not a single card: everything that can still apply is listed', () => {
+    const { options } = rankGuides(empty());
+    assert.equal(options.length >= 4, true, 'an empty pack should still show the ways through it');
+
+    // What is ready now comes first and is marked as applying; the rest follow in the
+    // order they will happen, each saying what it is for.
+    const ready = options.filter((option) => option.applicable);
+    const later = options.filter((option) => !option.applicable);
+    assert.equal(ready[0]?.id, 'start-from-email');
+    assert.equal(later.length >= 1, true);
+    for (const option of later) {
+      assert.equal(typeof option.later, 'string', `${option.id} should say what it is for`);
+      assert.equal((option.later ?? '').length > 10, true);
+    }
+    assert.deepEqual(
+      later.map((option) => option.id),
+      ['ready-to-send', 'fix-checks', 'tenant-message'],
+      'the ones still to come read in the order a tenancy happens',
+    );
+  });
+
+  it('drops a guide that can never apply again', () => {
+    // "Start from an email" has happened once there is a tenant, and it carries no
+    // `later` line, so it disappears rather than sitting greyed out for ever.
+    const { options } = rankGuides(empty({ hasTenant: true }));
+    assert.equal(options.some((option) => option.id === 'start-from-email'), false);
+  });
+
+  it('puts what is ready above what is merely coming, whichever rank each has', () => {
+    const facts = empty({ hasTenant: true, documents: 0, hasCoverMessage: false, uploads: 0 });
+    const { options } = rankGuides(facts);
+    assert.equal(options[0]?.applicable, true);
+    const firstLater = options.findIndex((option) => !option.applicable);
+    if (firstLater !== -1) {
+      assert.equal(
+        options.slice(firstLater).every((option) => !option.applicable),
+        true,
+        'no applicable option may appear after a later one',
+      );
+    }
+  });
   it('starts an empty pack with the landlord’s email', () => {
     const { options, resume } = rankGuides(empty());
     assert.equal(options[0]?.id, 'start-from-email');
@@ -91,7 +132,8 @@ describe('what is offered, and in what order', () => {
   });
 
   it('offers uploading an agency’s own document when they have not', () => {
-    assert.equal(ids(empty({ hasTenant: true, documents: 7, hasCoverMessage: true })).includes('use-our-document'), true);
+    const notYet = ids(empty({ hasTenant: true, documents: 7, hasCoverMessage: true })).includes('use-our-document');
+    assert.equal(notYet, true, 'it is listed, even before it applies');
     const done = rankGuides(empty({ hasTenant: true, documents: 7, hasCoverMessage: true, uploads: 1, mappedUploads: 1 }));
     assert.equal(done.options.some((option) => option.id === 'use-our-document'), false, 'and stops once it is mapped');
   });

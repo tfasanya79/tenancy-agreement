@@ -188,7 +188,12 @@ product owner, not the agency owner. See [docs/FEEDBACK.md](FEEDBACK.md).
 ## Packs
 
 **`GET /api/packs/:id/guidance`** — what the Assistant should offer, ranked by the pack.
-Returns `{ options: [{ id, title, why, steps: [{ id, title, what, usesModel, where, done }], at, complete, then }], resume, landlord, facts }`. `then` names the guide to offer when this one runs out of steps.
+Returns `{ options: [{ id, title, why, steps: [{ id, title, what, usesModel, where, done }], at, complete, then, applicable, later }], resume, landlord, facts }`.
+
+`options` is the whole menu, not one suggestion: everything that can still apply to this
+pack, with what is ready first (`applicable: true`, ranked by need) and what comes later
+after it (`applicable: false`, with `later` saying what it is for). A guide whose steps are
+all done is dropped. `then` names the guide to offer when this one runs out of steps.
 `done` and `at` are computed from the pack by `src/agent/guides.ts`, never from a
 conversation, so the interface can tick a step only when the work is actually in the pack.
 No model call is made to answer it.
