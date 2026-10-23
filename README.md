@@ -416,7 +416,7 @@ tenancy-agreement/
 │   └── knowledge/rules.ts     the curated rule set
 ├── templates/                 ← the documents. edit these.
 ├── public/                    the interface (index.html, app.js, styles.css)
-├── tests/                     356 tests
+├── tests/                     379 tests
 ├── scripts/                   doctor · sample · rules
 ├── samples/                   a finished example pack
 ├── docs/                      the manuals
@@ -433,7 +433,7 @@ tenancy-agreement/
 | `pnpm start` | Run the app |
 | `pnpm dev` | Run it and restart on file changes |
 | `pnpm doctor` | Check Node, `.env`, templates, data folder, key, port — and say what to fix |
-| `pnpm test` | Run the 356 tests |
+| `pnpm test` | Run the 379 tests |
 | `pnpm typecheck` | TypeScript, no build |
 | `pnpm docs:check` | Fail if the documentation disagrees with the code — commands, paths, test counts |
 | `pnpm golden` | Record the rendered text of every template, so a wording change is a deliberate act |
@@ -535,7 +535,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 
 | Area | State |
 | --- | --- |
-| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 356 tests passing |
+| Document pipeline (Word, print HTML, Markdown, ZIP) | ✅ 379 tests passing |
 | Compliance checks and deadlines | ✅ |
 | Agent loop, tools, guards, audit log | ✅ tested against a mocked transport |
 | Live DeepSeek call | ✅ verified end-to-end against the real API — one pasted email produced 17 fields, four rule lookups, the checks, six documents and three notes |
@@ -543,6 +543,7 @@ Run `pnpm doctor` first — it checks all of this and tells you what to fix.
 | Back office — landlords, properties, rooms, tenants | ✅ records, screens, and a migration that links the packs you already have |
 | Accounts, roles and an audit trail | ✅ owner / agent / landlord, scrypt passwords, sessions, first-run setup, and a History tab that names the person — [docs/MULTI-USER.md](docs/MULTI-USER.md) |
 | A FEEDBACK button and a queue to work it | ✅ everyone with an account can file; an assistant reflects it back before filing; the operator gets a queue with statuses, duplicates counted, and personal data flagged — [docs/FEEDBACK.md](docs/FEEDBACK.md) |
+| A guiding chat instead of a blank box | ✅ the Assistant offers the next few things worth doing, ranked by the pack itself, and walks one to the end with steps ticked from facts rather than from the conversation — [docs/USING-THE-APP.md](docs/USING-THE-APP.md) |
 | Prefilled forms | ✅ a new tenancy in an existing room needs three typed details; every other value is inherited and labelled with where it came from |
 | Tenancy lifecycle | ✅ upcoming, active, ending, ended — the pack list is grouped by it |
 | Shared values warn before they change | ✅ editing a room's rent says how many tenancies inherit it and asks first |
@@ -574,7 +575,7 @@ step in [CONTRIBUTING.md](CONTRIBUTING.md).
 
 ```bash
 pnpm install
-pnpm test        # 356 tests
+pnpm test        # 379 tests
 pnpm typecheck
 ```
 

@@ -1004,3 +1004,74 @@ body.is-gate .main { display: grid; place-items: center; min-height: 70vh; }
 @media (max-width: 640px) {
   .ov-activity-row { grid-template-columns: 1fr; gap: .1rem; }
 }
+/* --- the start of the assistant -------------------------------------------- */
+
+.guide-start { display: grid; gap: .7rem; max-width: 46rem; }
+.guide-intro { display: grid; gap: .2rem; }
+.guide-hello { margin: 0; font-size: .98rem; font-weight: 600; }
+.guide-cards { display: grid; gap: .5rem; }
+.guide-cards-slim { grid-template-columns: repeat(auto-fit, minmax(14rem, 1fr)); }
+.guide-card {
+  display: grid;
+  gap: .2rem;
+  width: 100%;
+  text-align: left;
+  font: inherit;
+  cursor: pointer;
+  background: var(--paper);
+  border: 1px solid var(--line-strong);
+  border-radius: var(--radius-sm);
+  padding: .6rem .7rem;
+  color: var(--ink);
+}
+.guide-card:hover { border-color: var(--accent); background: var(--accent-soft); }
+.guide-card.is-slim { padding: .45rem .6rem; }
+.guide-card.is-slim .guide-why { display: none; }
+.guide-why { font-size: .82rem; color: var(--ink-soft); }
+.guide-meta { font-size: .72rem; color: var(--muted); letter-spacing: .02em; }
+
+.guide-rail {
+  display: grid;
+  gap: .3rem;
+  background: var(--paper);
+  border: 1px solid var(--line);
+  border-radius: var(--radius);
+  padding: .7rem .8rem;
+  box-shadow: var(--shadow);
+}
+.guide-step {
+  display: grid;
+  grid-template-columns: 1.6rem minmax(0, 1fr);
+  gap: .5rem;
+  align-items: start;
+  padding: .2rem 0;
+  opacity: .65;
+}
+.guide-step.is-current { opacity: 1; }
+.guide-step.is-done { opacity: .55; }
+.guide-tick {
+  display: grid;
+  place-items: center;
+  width: 1.4rem;
+  height: 1.4rem;
+  border-radius: 50%;
+  font-size: .72rem;
+  font-weight: 700;
+  background: var(--sand-deep);
+  color: var(--ink-soft);
+}
+.guide-step.is-done .guide-tick { background: var(--accent); color: #fff; }
+.guide-step.is-current .guide-tick { background: var(--accent-soft); color: var(--accent); }
+.guide-step-text { display: grid; gap: .1rem; }
+.guide-step-text strong { font-size: .88rem; }
+.guide-actions {
+  display: flex;
+  gap: .45rem;
+  align-items: center;
+  flex-wrap: wrap;
+  margin-top: .35rem;
+  padding-top: .5rem;
+  border-top: 1px solid var(--line);
+}
+.guide-output { display: grid; gap: .2rem; }
+.guide-output p { margin: .2rem 0 0; }

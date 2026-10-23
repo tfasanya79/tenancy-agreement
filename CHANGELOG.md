@@ -19,6 +19,34 @@ Proxy access logs no longer carry a `user_id` (there is no longer a proxy
 credential to name), so attribution lives in the app's own trail — which is more
 precise anyway, because it records the field that changed rather than the URL that
 was requested.
+### Added — the Assistant offers the next thing, and walks it to the end
+
+Reported: the chat should ask what you want to work on, offer the options, and take you
+through step by step. It used to open with two paragraphs and four fixed chips — the same
+four for an empty pack and for one that is a download away from finished.
+
+- **Ranked by the pack, not a flat menu.** New `src/agent/guides.ts` holds the guides as
+  data (title, one-line reason, steps with a predicate over the pack), and
+  `GET /api/packs/:id/guidance` ranks them by need: an empty pack offers *start from the
+  landlord's email*, a pack with details missing offers *finish it* ("2 details are still
+  needed"), one with flagged checks offers *fix those*, one that is produced offers *write
+  to the tenant*. No model call is needed to draw the screen.
+- **A step rail, one action at a time.** Finished steps ticked, the current one
+  highlighted, one button to do it, and **I'll do it myself** to leave the guide.
+- **Done is read from the pack.** `missing`, compliance counts, `documents` and
+  `coverMessage` decide which step is current — never a sentence in the conversation —
+  so a guide cannot walk somebody past the review gate. Producing documents from a guide
+  asks the same "carry on anyway?" question the Documents tab asks.
+- **Only two steps cost a model call** — reading a pasted email and writing the tenant's
+  message — and both are marked `usesModel` so the cost is visible in the definitions.
+- **A landlord gets a shorter, read-only list**, because a guide that writes is not theirs.
+- The download step is the one thing the app cannot verify; it ticks when the person takes
+  the file, which is the honest way round.
+
+The four static chips and the never-read `examplePrompts` field are gone. 21 tests in
+`tests/guides.test.ts` pin the ranking per pack state, the landlord set, and that ticks come
+from facts; 2 more exercise the endpoint, including a landlord being told `404` for a pack
+that is not theirs.
 ### Fixed — a working queue that looked broken, and a back office with no front
 
 Reported from use: the top-bar Feedback button opened the settings form, and the queue

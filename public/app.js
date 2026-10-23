@@ -27,16 +27,16 @@ const state = {
   dirty: new Set(),
   selection: new Set(),
   chat: new Map(), // packId -> [{ role, text, trace }]
+  /** Which guide is being followed, and what the server last said about this pack. */
+  guide: null,
+  guidance: null,
+  /** Set when the person takes the zip, because a download cannot be observed. */
+  guideDownloaded: false,
   streaming: false,
   saveTimer: null,
 };
 
-const CHIPS = [
-  { label: 'What is still missing?', message: 'What is still missing from this pack? Ask me for anything you need.' },
-  { label: 'Run the checks', message: 'Run the compliance checks and tell me if anything needs fixing.' },
-  { label: 'Generate the pack', message: 'Generate every document this tenant needs for move-in.' },
-  { label: 'Draft the tenant email', message: 'Draft the covering email and a short WhatsApp message for the tenant.' },
-];
+
 
 /* -------------------------------------------------------------- helpers --- */
 
@@ -509,6 +509,10 @@ async function selectPack(id, options = {}) {
     return;
   }
   if (options.keepTab !== true) state.tab = 'assistant';
+  // A guide belongs to the pack it was started on.
+  state.guide = null;
+  state.guidance = null;
+  state.guideDownloaded = false;
   if (!state.chat.has(id)) state.chat.set(id, []);
   renderSidebar();
   renderMain();
@@ -754,23 +758,7 @@ function renderAssistant() {
   const log = el('div', { class: 'chat-log', id: 'chat-log' });
 
   if (messages.length === 0) {
-    log.append(
-      el(
-        'div',
-        { class: 'msg' },
-        el('div', { class: 'msg-avatar' }, 'TD'),
-        el(
-          'div',
-          { class: 'msg-bubble' },
-          el('p', {}, 'Hello. I can turn your templates into this tenant’s documents.'),
-          el(
-            'p',
-            { style: { marginBottom: '0' } },
-            'Paste the landlord’s email or your WhatsApp thread into the box below and I will pull out the details — or use one of the shortcuts.',
-          ),
-        ),
-      ),
-    );
+    log.append(guidanceStart(packId));
   }
 
   for (const message of messages) {
@@ -853,24 +841,6 @@ function renderAssistant() {
   const composer = el(
     'div',
     { class: 'composer' },
-    el(
-      'div',
-      { class: 'chips' },
-      ...CHIPS.map((chip) =>
-        el(
-          'button',
-          {
-            class: 'chip',
-            type: 'button',
-            disabled: !available || state.streaming,
-            onClick: () => {
-              void sendMessage(chip.message);
-            },
-          },
-          chip.label,
-        ),
-      ),
-    ),
     textarea,
     el(
       'div',
@@ -2305,6 +2275,262 @@ async function renderDue(main) {
       ? el('div', { class: 'notice notice-info' }, 'Nothing due. Every tenancy is up to date.')
       : el('div', { class: 'bo-grid' }, ...sections),
   );
+}
+
+/* -------------------------------------------------------------- guidance --- */
+
+/**
+ * The start of the Assistant: the next few things worth doing, ranked by the pack.
+ *
+ * The order and the ticks both come from the server (`/guidance`), which reads the pack
+ * itself. Nothing here decides that a step is finished — the model least of all.
+ */
+function guidanceStart(packId) {
+  const wrap = el('div', { class: 'guide-start' }, el('div', { class: 'msg-bubble' }, el('p', {}, 'Working out where this pack stands…')));
+  void redrawGuidance(packId, wrap);
+  return wrap;
+}
+
+async function redrawGuidance(packId, wrap) {
+  let data;
+  try {
+    data = await api(`/api/packs/${packId}/guidance`);
+  } catch (error) {
+    wrap.replaceChildren(el('div', { class: 'msg-bubble' }, el('p', {}, `I could not read this pack: ${error.message}`)));
+    return;
+  }
+
+  state.guidance = data;
+
+  const chosen = state.guide === null || state.guide === undefined ? null : data.options.find((option) => option.id === state.guide);
+  const guide = chosen ?? data.options.find((option) => data.resume !== null && option.id === data.resume.guideId) ?? null;
+  if (guide !== null && state.guide === null) state.guide = guide.id;
+
+  const heading =
+    data.landlord === true
+      ? 'This tenancy is yours to read. What would you like to do?'
+      : guide !== null
+        ? guide.title
+        : 'What would you like to work on?';
+
+  const intro = el(
+    'div',
+    { class: 'guide-intro' },
+    el('p', { class: 'guide-hello' }, heading),
+    el(
+      'p',
+      { class: 'small' },
+      data.landlord === true
+        ? 'Your access is read-only, so these are the things you can do here.'
+        : 'Pick one and I will take you through it — or just describe what you want in the box below.',
+    ),
+  );
+
+  // A guide under way shows its steps; otherwise, the ranked cards.
+  const body =
+    guide === null || guide.complete || data.options.length === 0
+      ? el('div', { class: 'guide-cards' }, ...data.options.map((option) => guideCard(option, packId)))
+      : el(
+          'div',
+          {},
+          el('div', { class: 'guide-cards guide-cards-slim' }, ...data.options.filter((option) => option.id !== guide.id).map((option) => guideCard(option, packId, true))),
+          guideRail(guide, packId),
+        );
+
+  wrap.replaceChildren(intro, body);
+}
+
+function guideCard(option, packId, slim = false) {
+  const remaining = option.steps.length - option.at;
+  return el(
+    'button',
+    {
+      class: `guide-card${slim ? ' is-slim' : ''}`,
+      type: 'button',
+      onClick: async () => {
+        state.guide = option.id;
+        await renderMain();
+      },
+    },
+    el('strong', {}, option.title),
+    el('span', { class: 'guide-why' }, option.why),
+    el(
+      'span',
+      { class: 'guide-meta' },
+      option.complete ? 'done' : `${remaining} step${remaining === 1 ? '' : 's'}`,
+      option.at > 0 ? ` · ${option.at} done` : '',
+    ),
+  );
+}
+
+/** The steps, with what is finished ticked by the server and one action at a time. */
+function guideRail(guide, packId) {
+  // The app cannot see a download, so the person who took the file ticks that one.
+  const steps0 = guide.steps.map((step) =>
+    step.id === 'download' && state.guideDownloaded === true ? { ...step, done: true } : step,
+  );
+  const at = steps0.findIndex((step) => !step.done);
+  const current = at === -1 ? undefined : steps0[at];
+  guide = { ...guide, steps: steps0, at: at === -1 ? steps0.length : at };
+
+  const steps = guide.steps.map((step, index) =>
+    el(
+      'div',
+      { class: `guide-step${step.done ? ' is-done' : ''}${index === guide.at ? ' is-current' : ''}` },
+      el('span', { class: 'guide-tick' }, step.done ? '✓' : String(index + 1)),
+      el(
+        'div',
+        { class: 'guide-step-text' },
+        el('strong', {}, step.title),
+        el('span', { class: 'small' }, step.what),
+      ),
+    ),
+  );
+
+  const actions = el('div', { class: 'guide-actions' });
+
+  if (current === undefined) {
+    actions.append(el('span', { class: 'small' }, 'That is everything for this pack.'));
+  } else {
+    actions.append(
+      el(
+        'button',
+        { class: 'btn btn-primary btn-sm', type: 'button', onClick: () => void guideDo(packId, current) },
+        guideActionLabel(current),
+      ),
+      el(
+        'button',
+        {
+          class: 'btn btn-sm btn-ghost',
+          type: 'button',
+          title: 'Leave this guide and use the tabs instead',
+          onClick: async () => {
+            state.guide = null;
+            await renderMain();
+          },
+        },
+        'I’ll do it myself',
+      ),
+    );
+    if (current.where !== null) {
+      actions.append(el('span', { class: 'small' }, `Or do it in ${current.where}.`));
+    }
+  }
+
+  return el('div', { class: 'guide-rail' }, ...steps, actions, el('div', { class: 'guide-output', id: 'guide-output' }));
+}
+
+const guideActionLabel = (step) => {
+  if (step.id === 'paste') return 'Paste it below';
+  if (step.id === 'message') return 'Draft it for me';
+  if (step.id === 'generate') return 'Produce them now';
+  if (step.id === 'checks' || step.id === 'outstanding') return 'Run the checks';
+  if (step.id === 'download') return 'Download the zip';
+  if (step.id === 'upload' || step.id === 'map') return 'Open our documents';
+  if (step.id === 'fill') return 'Open the documents';
+  return 'Show me';
+};
+
+/** Do the thing the current step is about, then ask the server again. */
+async function guideDo(packId, step) {
+  const output = $('#guide-output');
+  const say = (node) => {
+    if (output !== null) output.replaceChildren(node);
+  };
+
+  try {
+    if (step.id === 'paste') {
+      const input = $('#composer-input');
+      if (input !== null) input.focus();
+      say(el('p', { class: 'small' }, 'Paste it into the box below and press Send — I will read it and tell you what I found.'));
+      return;
+    }
+
+    if (step.id === 'message') {
+      await sendMessage('Draft the covering email and a short WhatsApp message for the tenant.');
+      return;
+    }
+
+    if (step.id === 'download') {
+      window.location.href = `/api/packs/${packId}/bundle.zip`;
+      say(el('p', { class: 'small' }, 'That is the zip — every document, plus the summary sheet.'));
+      return;
+    }
+
+    if (step.id === 'upload' || step.id === 'map' || step.id === 'fill') {
+      await renderMain().then(() => {});
+      if (step.id === 'fill') {
+        state.tab = 'documents';
+        await renderMain();
+      } else {
+        await openOurDocuments();
+      }
+      return;
+    }
+
+    if (step.id === 'checks' || step.id === 'outstanding') {
+      const result = await api(`/api/packs/${packId}/checks`, { method: 'POST', body: '{}' });
+      const findings = (result.findings ?? []).filter((finding) => finding.severity !== 'info');
+      say(
+        el(
+          'div',
+          {},
+          el('p', { class: 'small' }, findings.length === 0 ? 'Nothing flagged.' : `${findings.length} to look at:`),
+          ...findings.slice(0, 5).map((finding) => el('p', { class: 'small' }, `• ${finding.title}`)),
+        ),
+      );
+      await reloadGuidance(packId);
+      return;
+    }
+
+    if (step.id === 'generate') {
+      const ids = state.detail?.suggested ?? [];
+      if (ids.length === 0) {
+        say(el('p', { class: 'small' }, 'No documents are suggested for this pack yet.'));
+        return;
+      }
+      const generated = await api(`/api/packs/${packId}/generate`, {
+        method: 'POST',
+        body: JSON.stringify({ templateIds: ids }),
+      });
+      if (generated.needsConfirmation === true) {
+        // The same question the Documents tab asks. The guide does not get to skip it.
+        askToContinue(generated, async () => {
+          await api(`/api/packs/${packId}/generate`, {
+            method: 'POST',
+            body: JSON.stringify({ templateIds: ids, confirm: true }),
+          });
+          state.detail = await api(`/api/packs/${packId}`);
+          await refreshPacks();
+          await reloadGuidance(packId);
+          await renderMain();
+        });
+        return;
+      }
+      state.detail = generated.pack ?? state.detail;
+      await refreshPacks();
+      await reloadGuidance(packId);
+      await renderMain();
+      return;
+    }
+
+    if (step.id === 'essentials' || step.id === 'review') {
+      state.tab = 'details';
+      await renderMain();
+      return;
+    }
+  } catch (error) {
+    say(el('p', { class: 'small' }, error.message));
+  }
+}
+
+/** Ask the server where the pack stands now, and redraw the rail from its answer. */
+async function reloadGuidance(packId) {
+  try {
+    state.guidance = await api(`/api/packs/${packId}/guidance`);
+  } catch {
+    // The rail keeps whatever it had; the ticks simply will not move.
+  }
 }
 
 /* -------------------------------------------------------------- feedback --- */

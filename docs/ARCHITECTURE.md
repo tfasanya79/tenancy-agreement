@@ -19,7 +19,7 @@ One Node process. One SQLite file. One HTML page. No build step, no bundler, no
 | Assistant | `src/agent/` | DeepSeek client, tool definitions, the loop, prompt |
 | Rules | `src/knowledge/rules.ts` | 21 curated England & Wales rules with sources |
 | Interface | `public/` | `index.html`, `app.js`, `styles.css` — plain ES modules, served statically |
-| Tests | `tests/` | 356 tests on `node:test` |
+| Tests | `tests/` | 379 tests on `node:test` |
 
 Three runtime dependencies: `fastify`, `@fastify/static`, `docx`.
 
@@ -159,6 +159,23 @@ The `.md` output is the expanded source, unparsed. It exists so a document can b
 checked word by word without opening Word.
 
 ---
+
+## The guiding chat, and why the steps live in code
+
+`src/agent/guides.ts` holds the few things the Assistant can offer — start from an email,
+finish a pack, fix what the checks flagged, write to the tenant, use the agency's own
+document — as data: a title, a one-line reason, and steps with a predicate over the pack.
+
+The interface asks `GET /api/packs/:id/guidance` and draws cards ranked by need. The
+server decides which step is current by **reading the pack** (`missing`, compliance counts,
+`documents`, `coverMessage`), not by trusting anything the model said. That is deliberate:
+a guide that could be walked past the review gate would produce documents nobody agreed to,
+so the same route and the same confirmation the Documents tab uses are called from the
+guide, and the tick appears only when the pack has changed.
+
+The model is used in exactly two step types — reading a pasted email, and writing the
+tenant's message — and those are marked `usesModel` in the definitions so the cost of a
+guide is visible rather than implied.
 
 ## The agent loop
 
@@ -301,6 +318,7 @@ data directory.
 | Change what a rule says, or add one | `src/knowledge/rules.ts`, then `pnpm rules` |
 | Add or change an assistant tool | `src/agent/tools.ts` (`TOOL_DEFINITIONS`, `executeTool`, `describeToolCall`, `summarise` in `loop.ts`) |
 | Change the assistant's behaviour | `src/agent/prompts.ts` |
+| Change what the Assistant offers at the start, or what counts as a finished step | `src/agent/guides.ts` |
 | Change retries, temperature or token limits | `src/agent/deepseek.ts` |
 | Change Word styling, fonts, margins | `src/docs/toDocx.ts` |
 | Change the printed/PDF look | `CSS` in `src/docs/toHtml.ts` |

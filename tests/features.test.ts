@@ -507,6 +507,75 @@ describe('the overview', () => {
   });
 });
 
+describe('the guidance the assistant offers', () => {
+  it('offers the next thing, ranked by the pack, without a model', async () => {
+    const created = await as(cookie, {
+      method: 'POST',
+      url: '/api/packs',
+      payload: { fields: { tenants: [{ full_name: 'Guide Test' }], 'property.address_line1': '1 Guide Street' } },
+    });
+    const packId = created.json().pack.id;
+
+    const response = await as(cookie, { method: 'GET', url: `/api/packs/${packId}/guidance` });
+    assert.equal(response.statusCode, 200, response.body);
+    const body = response.json();
+    assert.equal(Array.isArray(body.options), true);
+    assert.equal(body.landlord, false);
+    assert.equal(body.options.length >= 1, true);
+
+    // A pack with a tenant and nothing else is a pack to finish, not to start.
+    const top = body.options[0];
+    assert.equal(top.id, 'ready-to-send');
+    assert.equal(top.steps[top.at].id, 'essentials');
+    assert.equal(typeof top.why, 'string');
+    assert.ok(body.facts.missing.length >= 1, 'the missing essentials are named');
+
+    const empty = await as(cookie, { method: 'POST', url: '/api/packs', payload: { fields: {} } });
+    const fresh = await as(cookie, { method: 'GET', url: `/api/packs/${empty.json().pack.id}/guidance` });
+    assert.equal(fresh.json().options[0].id, 'start-from-email');
+  });
+
+  it('gives a landlord the read-only set, and refuses another landlord’s pack', async () => {
+    const landlord = await as(cookie, {
+      method: 'POST',
+      url: '/api/backoffice/landlords',
+      payload: { name: 'Guide Landlord', address: '2 Guide Street', email: 'guide@landlord.test', phone: '07700 900777' },
+    });
+    const landlordId = landlord.json().id;
+    const pack = await as(cookie, {
+      method: 'POST',
+      url: '/api/packs',
+      payload: { fields: { tenants: [{ full_name: 'Scoped Tenant' }] } },
+    });
+    await as(cookie, { method: 'PATCH', url: `/api/packs/${pack.json().pack.id}`, payload: { landlordId } });
+    await as(cookie, {
+      method: 'POST',
+      url: '/api/users',
+      payload: {
+        name: 'Guide Landlord',
+        email: 'guidance@landlord.test',
+        role: 'landlord',
+        password: 'a long enough phrase',
+        landlordId,
+      },
+    });
+    const login = await app.inject({
+      method: 'POST',
+      url: '/api/auth/login',
+      payload: { email: 'guidance@landlord.test', password: 'a long enough phrase' },
+    });
+    const scopedCookie = String(login.headers['set-cookie'] ?? '').split(';')[0] ?? '';
+
+    const mine = await as(scopedCookie, { method: 'GET', url: `/api/packs/${pack.json().pack.id}/guidance` });
+    assert.equal(mine.statusCode, 200, mine.body);
+    assert.equal(mine.json().landlord, true);
+    assert.equal(mine.json().options[0].id, 'read-the-pack');
+
+    const other = await as(cookie, { method: 'POST', url: '/api/packs', payload: { fields: {} } });
+    const refused = await as(scopedCookie, { method: 'GET', url: `/api/packs/${other.json().pack.id}/guidance` });
+    assert.equal(refused.statusCode, 404, 'a pack that is not theirs does not exist');
+  });
+});
 describe('granting the flag, and removing an account', () => {
   it('lets the operator share the flag, and it sticks', async () => {
     const granted = await as(operatorCookie, {

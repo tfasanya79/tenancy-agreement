@@ -24,6 +24,7 @@ import { RULES_REVIEWED_ON, ruleById, searchRules } from './knowledge/rules.ts';
 import { DeepSeekClient } from './agent/deepseek.ts';
 import { runAgent, type AgentEvent } from './agent/loop.ts';
 import { EXAMPLE_PROMPTS } from './agent/prompts.ts';
+import { rankGuides } from './agent/guides.ts';
 import { createZip } from './util/zip.ts';
 import { buildPackSummaryText, packSummaryView } from './docs/packSummary.ts';
 import { BackOffice } from './backoffice/entities.ts';
@@ -959,6 +960,47 @@ export async function buildApp(deps: AppDeps): Promise<FastifyInstance> {
     return reply.code(201).send(packDetail(pack));
   });
 
+  /**
+   * What to offer this person, ranked by what is true of this pack.
+   *
+   * Drawn from facts the app already holds, so the start of the Assistant costs no model
+   * call — and so the order can be asserted in a test rather than admired by hand.
+   */
+  app.get('/api/packs/:id/guidance', async (request, reply) => {
+    const pack = store.findPack(paramId(request));
+    if (pack === null) return notFound(reply, 'That pack no longer exists.');
+
+    const viewer = currentUser(request);
+    const fields = effectiveFor(pack);
+    const context = contextFor(pack, backOffice);
+    const readiness = assessPack(fields);
+    const uploads = customTemplates.list();
+    const mapped = uploads.filter(
+      (template) => (template.links?.length ?? 0) > 0 || (template.blankFields?.length ?? 0) > 0,
+    ).length;
+
+    const facts = {
+      hasTenant: pack.tenantName.trim() !== '',
+      missing: context.resolved.missing,
+      errors: readiness.compliance.counts.error,
+      warnings: readiness.compliance.counts.warning,
+      documents: store.listDocuments(pack.id).length,
+      suggested: registry.suggestSelection(fields).length,
+      hasCoverMessage: pack.coverMessage !== null,
+      uploads: uploads.length,
+      mappedUploads: mapped,
+      isLandlord: viewer !== null && isLandlord(viewer),
+    };
+
+    const { options, resume } = rankGuides(facts);
+    return { options, resume, landlord: facts.isLandlord, facts: {
+      missing: facts.missing,
+      documents: facts.documents,
+      suggested: facts.suggested,
+      errors: facts.errors,
+      warnings: facts.warnings,
+    } };
+  });
   app.get('/api/packs/:id', async (request, reply) => {
     const pack = store.findPack(paramId(request));
     if (pack === null) return notFound(reply, 'That pack no longer exists.');

@@ -109,7 +109,32 @@ overwrites something you typed with a blank.
 
 ### Assistant
 
-The conversation. Useful things to type:
+Opening the Assistant does not give you an empty box and a guess at what to type. It
+reads the pack and offers the **next few things worth doing**, best first:
+
+| What it offers | When |
+| --- | --- |
+| **Start from the landlord's email** | the pack is empty — paste the email or WhatsApp thread and it pulls out the dates, rent, names and addresses |
+| **Get this pack ready to send** | there is a tenant: it works through the essentials, the checks, producing the documents, the download, and the message to the tenant |
+| **Fix what the checks flagged** | details are in, but something needs a look first |
+| **Write the message to the tenant** | the pack is produced and the tenant has not been written to |
+| **Use our own document** | you have not uploaded your own agreement yet |
+
+Each card says *why* it is being offered — "3 details are still needed before the
+agreement can be produced" — and picking one shows the steps as a rail: finished ones
+ticked, the current one highlighted, one button to do it, and **I'll do it myself** to
+leave the guide and use the tabs.
+
+Two things worth knowing about the guides:
+
+- **The ticks are facts, not encouragement.** A step is ticked because the pack has
+  changed — the details are complete, the documents exist — not because the conversation
+  said so. The only exception is the download, which the app cannot see: it ticks when you
+  take the file.
+- **A guide never skips a question.** Producing documents through the guide asks the same
+  "carry on anyway?" question the Documents tab asks.
+
+You can also ignore all of it and type. Useful things to type:
 
 | What you want | What to type |
 | --- | --- |
@@ -119,8 +144,8 @@ The conversation. Useful things to type:
 | A message to the tenant | *"Draft the covering email and a short WhatsApp message for the tenant."* |
 | A question about the law | *"Does the deposit have to be protected within 30 days?"* |
 
-The buttons above the message box do the first four in one click.
-
+A landlord sees a shorter list — what they can read, and what is outstanding — because
+their access is read-only.
 **The draft appears in the chat**, ready to read and copy — not just a note saying it was saved. It is also kept on the pack: you will find it again under **Documents → Message to the tenant**, with a Copy button for each version.
 
 **Replies are laid out properly.** A heading like *Email* appears as a heading, a list

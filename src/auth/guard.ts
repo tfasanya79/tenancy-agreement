@@ -89,7 +89,7 @@ const LANDLORD_READS: RegExp[] = [
   /^\/api\/rules(\/[^/]+)?$/,
   /^\/api\/packs$/,
   /^\/api\/packs\/[^/]+$/,
-  /^\/api\/packs\/[^/]+\/(timeline\.html|bundle\.zip|calendar\.ics)$/,
+  /^\/api\/packs\/[^/]+\/(timeline\.html|bundle\.zip|calendar\.ics|guidance)$/,
   /^\/api\/documents\/[^/]+\/download$/,
   /^\/api\/backoffice$/,
   /^\/api\/due$/,
